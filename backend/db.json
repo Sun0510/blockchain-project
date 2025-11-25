@@ -1,0 +1,28 @@
+{
+  "users": [],
+  "hex_ranges": [
+    {
+      "id": "r1",
+      "start": "0000000000000000",
+      "end": "00ffffffffffffff",
+      "active": true,
+      "created_at": 0
+    }
+  ],
+  "submissions": [],
+  "tokens_tx": [],
+  "nfts": [
+    {
+      "id": "1",
+      "token_id": null,
+      "contract_address": null,
+      "title": "Genesis Art",
+      "metadata_url": "",
+      "owner_user_id": null,
+      "listed_price": null,
+      "for_sale": false,
+      "created_at": 0
+    }
+  ],
+  "trade_requests": []
+}
