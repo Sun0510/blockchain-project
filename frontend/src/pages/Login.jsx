@@ -4,7 +4,7 @@ import API from '../api';
 export default function Login() {
   const handleGoogleLogin = () => {
     // 백엔드 OAuth 로그인 URL로 이동
-    window.location.href = `${API.baseURL}/auth/google`;
+    window.location.href = `http://localhost:4000/api/auth/google/login`;
   };
 
   return (
