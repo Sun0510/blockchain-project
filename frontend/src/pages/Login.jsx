@@ -1,51 +1,32 @@
-import React, { useState } from 'react';
+import React from 'react';
 import API from '../api';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
-  async function signup(e) {
-    e.preventDefault();
-    try {
-      const res = await API.post('/auth/signup', { email, password, name: '' });
-      localStorage.setItem('poc_token', res.data.token);
-      alert('Signed up and logged in');
-    } catch (e) {
-      alert('Signup error: ' + (e.response?.data?.error || e.message));
-    }
-  }
-
-  async function login(e) {
-    e.preventDefault();
-    try {
-      const res = await API.post('/auth/login', { email, password });
-      localStorage.setItem('poc_token', res.data.token);
-      alert('Logged in');
-    } catch (e) {
-      alert('Login error: ' + (e.response?.data?.error || e.message));
-    }
-  }
+  const handleGoogleLogin = () => {
+    // 백엔드 OAuth 로그인 URL로 이동
+    window.location.href = `${API.baseURL}/auth/google`;
+  };
 
   return (
-    <div>
-      <h3>Login / Signup (Email)</h3>
-      <form onSubmit={(e)=>e.preventDefault()}>
-        <div>
-          <label>Email: </label>
-          <input value={email} onChange={e=>setEmail(e.target.value)} />
-        </div>
-        <div>
-          <label>Password: </label>
-          <input value={password} onChange={e=>setPassword(e.target.value)} type="password" />
-        </div>
-        <button onClick={login}>Login</button>
-        <button onClick={signup} style={{ marginLeft: 8 }}>Signup</button>
-      </form>
+    <div className="flex items-center justify-center py-32">
+      <div className="bg-gray-800/50 backdrop-blur-xl border border-gray-700 p-10 rounded-2xl shadow-2xl w-full max-w-md">
+        <h2 className="text-3xl font-bold text-center text-white mb-10">
+          Login
+        </h2>
 
-      <hr />
-      <p>Google OAuth button (stub):</p>
-      <button onClick={()=>alert('In PoC Google OAuth is a stub — set up OAuth in backend and redirect')}>Sign in with Google (stub)</button>
+        {/* Google OAuth 로그인 버튼 */}
+        <button
+          onClick={handleGoogleLogin}
+          className="w-full bg-red-500 hover:bg-red-400 text-white rounded-lg py-4 font-semibold transition flex items-center justify-center space-x-3"
+        >
+          <img
+            src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+            alt="Google"
+            className="w-6 h-6"
+          />
+          <span>Sign in with Google</span>
+        </button>
+      </div>
     </div>
   );
 }

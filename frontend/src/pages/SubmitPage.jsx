@@ -2,34 +2,41 @@ import React, { useState } from 'react';
 import API from '../api';
 
 export default function SubmitPage() {
-  const [input, setInput] = useState('');
-  const [result, setResult] = useState(null);
-
-  async function submit(e) {
-    e.preventDefault();
-    try {
-      const res = await API.post('/submit', { input });
-      setResult(res.data);
-    } catch (err) {
-      setResult({ ok: false, error: err.response?.data?.error || err.message });
-    }
-  }
-
   return (
-    <div>
-      <h3>Submit Input</h3>
-      <form onSubmit={submit}>
-        <div>
-          <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Type something..." />
-          <button type="submit" style={{ marginLeft: 8 }}>Submit</button>
-        </div>
-      </form>
+    <div className="max-w-2xl mx-auto py-32 text-white">
+      <h1 className="text-4xl font-bold mb-10">Submit Your NFT</h1>
 
-      {result && (
-        <div style={{ marginTop: 12 }}>
-          <pre>{JSON.stringify(result, null, 2)}</pre>
+      <form className="space-y-6 bg-gray-800/40 p-8 rounded-2xl shadow-xl border border-gray-700">
+        <div>
+          <label className="block text-gray-300 mb-1">Title</label>
+          <input
+            className="w-full rounded-lg bg-gray-900 border border-gray-700 text-white p-3"
+            placeholder="NFT Title"
+          />
         </div>
-      )}
+
+        <div>
+          <label className="block text-gray-300 mb-1">Description</label>
+          <textarea
+            rows="4"
+            className="w-full rounded-lg bg-gray-900 border border-gray-700 text-white p-3"
+            placeholder="Describe your NFT..."
+          ></textarea>
+        </div>
+
+        <div>
+          <label className="block text-gray-300 mb-1">Upload Image</label>
+          <input
+            type="file"
+            className="w-full text-gray-300"
+          />
+        </div>
+
+        <button className="w-full bg-indigo-500 hover:bg-indigo-400 text-white font-semibold py-3 rounded-lg">
+          Submit NFT
+        </button>
+      </form>
     </div>
   );
 }
+
