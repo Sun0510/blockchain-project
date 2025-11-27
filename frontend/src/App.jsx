@@ -5,13 +5,13 @@ import { Link, Routes, Route, useNavigate } from "react-router-dom";
 import API from "./api";
 
 import Login from "./pages/Login";
-import SubmitPage from "./pages/SubmitPage";
+import GamePage from "./pages/GamePage";
 import NFTList from "./pages/NFTList";
 import NFTDetail from "./pages/NFTDetail";
 import MyPage from "./pages/MyPage";
 
 const navigation = [
-  { name: "Submit", href: "/submit" },
+  { name: "Game", href: "/game" },
   { name: "NFTs", href: "/nfts" },
   { name: "My Page", href: "/mypage" },
 ];
@@ -167,7 +167,7 @@ export default function App() {
             }
           />
           <Route path="/login" element={<Login />} />
-          <Route path="/submit" element={<SubmitPage />} />
+          <Route path="/game" element={<GamePage />} />
           <Route path="/nfts" element={<NFTList />} />
           <Route path="/nfts/:id" element={<NFTDetail />} />
           <Route path="/mypage" element={<MyPage />} />

@@ -1,0 +1,121 @@
+import React, { useEffect, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import API from "../api";
+
+export default function GamePage() {
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  const [input, setInput] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const [rewardHistory, setRewardHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  // 로그인 체크
+  useEffect(() => {
+    API.get("/api/me")
+      .then(res => setUser(res.data))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // reward history 불러오기
+  useEffect(() => {
+    if (!user) return;
+    API.get("/api/reward/history")
+      .then(res => setRewardHistory(res.data))
+      .catch(() => setRewardHistory([]))
+      .finally(() => setHistoryLoading(false));
+  }, [user]);
+
+  const submit = async () => {
+    if (!input || input.length > 20) {
+      alert("20자 이하의 문자열만 입력 가능");
+      return;
+    }
+
+    try {
+      const res = await API.post("/api/game/submit", { input });
+      setResult(res.data);
+
+      if (res.data.success && !res.data.duplicate) {
+        navigate("/reward");
+      } else if (res.data.duplicate) {
+        alert("이미 제출된 값입니다. 다른 문자열을 입력해주세요.");
+      } else {
+        alert("실패 ❌ 범위 밖입니다. 다시 입력해주세요.");
+      }
+    } catch (e) {
+      alert("서버 오류");
+    }
+  };
+
+  if (loading)
+    return <div className="text-white text-center py-40 text-2xl">Loading...</div>;
+
+  if (!user)
+    return (
+      <div className="text-center text-white py-40 space-y-6">
+        <p className="text-2xl">로그인이 필요합니다</p>
+        <Link to="/login" className="bg-indigo-500 px-6 py-3 rounded-lg">
+          Login
+        </Link>
+      </div>
+    );
+
+  return (
+    <div className="flex text-white">
+      {/* ⬅ LEFT: Game 화면 */}
+      <div className="flex-1 max-w-xl mx-auto py-32 px-6">
+        <h1 className="text-4xl font-bold mb-8">Game</h1>
+
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          maxLength={20}
+          placeholder="최대 20자 입력"
+          className="w-full p-3 rounded-lg bg-gray-900 border border-gray-700 mb-4"
+        />
+
+        <button
+          onClick={submit}
+          className="w-full bg-indigo-500 hover:bg-indigo-400 text-white font-semibold py-3 rounded-lg"
+        >
+          제출하기
+        </button>
+
+        {result && (
+          <div className="mt-6 bg-gray-800 rounded-xl p-4 text-sm space-y-2 border border-gray-700">
+            <p>해시 값: {result.answer}</p>
+            <p>랜덤 범위: {result.low} ~ {result.high}</p>
+            <p>결과: {result.success ? "성공 🎉" : "실패 ❌"}</p>
+            {result.duplicate && <p className="text-red-400">이미 등록된 값입니다.</p>}
+          </div>
+        )}
+      </div>
+
+      {/* ➡ RIGHT: Reward 내역 패널 */}
+      <aside className="w-80 bg-gray-900/60 border-l border-gray-700 p-6 overflow-y-auto">
+        <h2 className="text-2xl font-semibold mb-6">Reward History</h2>
+
+        {historyLoading && <p className="text-gray-400 text-sm">불러오는 중...</p>}
+
+        {!historyLoading && rewardHistory.length === 0 && (
+          <p className="text-gray-400 text-sm">아직 지급된 NFT가 없습니다.</p>
+        )}
+
+        {rewardHistory.map(item => (
+          <div key={item.id} className="mb-6 bg-gray-800/50 p-4 rounded-xl border border-gray-700 shadow">
+            <img
+              src={`https://picsum.photos/200?reward=${item.address}`}
+              className="rounded-lg w-full mb-3"
+            />
+            <p className="text-yellow-400 font-semibold">{item.address}</p>
+            <p className="text-gray-400 text-xs mt-1">{item.created_at}</p>
+          </div>
+        ))}
+      </aside>
+    </div>
+  );
+}
