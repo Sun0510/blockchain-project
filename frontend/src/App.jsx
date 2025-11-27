@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogPanel } from "@headlessui/react";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
-import { Link, Routes, Route } from "react-router-dom";
+import { Link, Routes, Route, useNavigate } from "react-router-dom";
+import API from "./api";
 
 import Login from "./pages/Login";
 import SubmitPage from "./pages/SubmitPage";
@@ -17,15 +18,29 @@ const navigation = [
 
 export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const navigate = useNavigate();
+
+  // 로그인 상태 확인
+  useEffect(() => {
+    API.get("/api/me")
+      .then((res) => setUser(res.data))
+      .catch(() => setUser(null));
+  }, []);
+
+  // 로그아웃
+  const handleLogout = () => {
+    API.post("/api/logout").finally(() => {
+      setUser(null);
+      navigate("/");
+    });
+  };
 
   return (
     <div className="bg-gray-900 min-h-screen">
       {/* HEADER */}
       <header className="absolute inset-x-0 top-0 z-50">
-        <nav
-          className="flex items-center justify-between p-6 lg:px-8"
-          aria-label="Global"
-        >
+        <nav className="flex items-center justify-between p-6 lg:px-8" aria-label="Global">
           <div className="flex lg:flex-1">
             <Link to="/" className="-m-1.5 p-1.5">
               <img
@@ -60,23 +75,28 @@ export default function App() {
             ))}
           </div>
 
-          {/* login button */}
+          {/* login / logout button */}
           <div className="hidden lg:flex lg:flex-1 lg:justify-end">
-            <Link
-              to="/login"
-              className="text-sm font-semibold text-white hover:text-indigo-300"
-            >
-              Login →
-            </Link>
+            {user ? (
+              <button
+                onClick={handleLogout}
+                className="text-sm font-semibold text-white hover:text-red-300"
+              >
+                Logout →
+              </button>
+            ) : (
+              <Link
+                to="/login"
+                className="text-sm font-semibold text-white hover:text-indigo-300"
+              >
+                Login →
+              </Link>
+            )}
           </div>
         </nav>
 
         {/* MOBILE MENU */}
-        <Dialog
-          open={mobileMenuOpen}
-          onClose={setMobileMenuOpen}
-          className="lg:hidden"
-        >
+        <Dialog open={mobileMenuOpen} onClose={setMobileMenuOpen} className="lg:hidden">
           <div className="fixed inset-0 z-50" />
           <DialogPanel className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-sm bg-gray-900 p-6 overflow-y-auto">
             <div className="flex items-center justify-between">
@@ -96,7 +116,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* mobile menu content */}
             <div className="mt-6 space-y-6">
               {navigation.map((item) => (
                 <Link
@@ -109,13 +128,25 @@ export default function App() {
                 </Link>
               ))}
 
-              <Link
-                to="/login"
-                className="block rounded-lg px-3 py-2 text-base font-semibold text-white hover:bg-white/5"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Login
-              </Link>
+              {user ? (
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleLogout();
+                  }}
+                  className="block rounded-lg px-3 py-2 text-base font-semibold text-white hover:bg-white/5"
+                >
+                  Logout
+                </button>
+              ) : (
+                <Link
+                  to="/login"
+                  className="block rounded-lg px-3 py-2 text-base font-semibold text-white hover:bg-white/5"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Login
+                </Link>
+              )}
             </div>
           </DialogPanel>
         </Dialog>
