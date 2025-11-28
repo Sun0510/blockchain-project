@@ -4,6 +4,7 @@ import API from "../api";
 export default function MyPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     API.get("/api/me")
@@ -11,6 +12,25 @@ export default function MyPage() {
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+
+  const downloadPrivateKey = async () => {
+    try {
+      setDownloading(true);
+      const res = await API.get("/api/download-private-key", {
+        responseType: "blob", // 파일 다운로드 중요!
+      });
+
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "my_private_key.txt";
+      link.click();
+    } catch (error) {
+      alert("개인키 다운로드 실패");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (loading) return <div className="text-white text-center py-40 text-2xl">Loading...</div>;
   if (!user) return <div className="text-white text-center py-40 text-2xl">로그인이 필요합니다</div>;
@@ -26,6 +46,14 @@ export default function MyPage() {
         <p className="text-gray-300 mt-1">
           Wallet: {user.wallet_address || "지갑 없음"}
         </p>
+
+        <button
+          onClick={downloadPrivateKey}
+          disabled={downloading}
+          className="mt-5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-semibold"
+        >
+          {downloading ? "다운로드 중..." : "개인키 TXT 다운로드"}
+        </button>
       </div>
 
       {/* NFT 목록 */}
