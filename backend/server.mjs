@@ -503,9 +503,9 @@ app.get("/api/trades", async (req, res) => {
 ------------------------- */
 app.post("/api/game/submit", authMiddleware, async (req, res) => {
   try {
-    const { input } = req.body;
-    if (!input || input.length > 20)
-      return res.status(400).json({ error: "INVALID_INPUT" });
+    const { input, sub } = req.body;
+    if (!input || input.length > 20) return res.status(400).json({ error: "INVALID_INPUT" });
+    if (!sub) return res.status(401).json({ error: "UNAUTHORIZED" });
 
     // SHA256 해시
     const hashHex = crypto.createHash("sha256").update(input).digest("hex");
@@ -514,45 +514,37 @@ app.post("/api/game/submit", authMiddleware, async (req, res) => {
     // 범위 체크
     const success = last16 >= LOW && last16 <= HIGH;
 
-    // DB 처리
-    const answeredAt = new Date().toISOString().slice(0, 19).replace("T", " ");
-    const sub = req.user.id;
+    // 중복 체크 (문자열 기준)
+    const [existing] = await db.query("SELECT * FROM answers WHERE str = ?", [input]);
+    if (existing.length > 0) {
+      return res.json({
+        success: false,
+        duplicate: true,
+        answer: last16,
+        low: LOW,
+        high: HIGH
+      });
+    }
 
-    // 중복 체크
-    const [existing] = await db.query(
-      "SELECT * FROM answers WHERE answer=? AND sub=?",
-      [last16, sub]
-    );
-
+    // 범위 성공 시 DB 저장
     if (success) {
-      if (existing.length > 0) {
-        // 이미 등록된 정답
-        return res.json({
-          success: false,
-          duplicate: true,
-          answer: last16,
-          low: LOW,
-          high: HIGH
-        });
-      }
-
-      // 신규 정답 저장
       await db.query(
-        "INSERT INTO answers (answer, sub, str, answered_at) VALUES (?, ?, ?, ?)",
-        [last16, sub, input, answeredAt]
+        "INSERT INTO answers (answer, sub, str, answered_at) VALUES (?, ?, ?, NOW())",
+        [last16, sub, input]
       );
     }
 
-    res.json({
+    return res.json({
       success,
       duplicate: false,
       answer: last16,
       low: LOW,
       high: HIGH
     });
+
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "SERVER_ERROR", message: e.message });
+    return res.status(500).json({ error: "SERVER_ERROR", message: e.message });
   }
 });
 
@@ -560,11 +552,61 @@ app.post("/api/game/submit", authMiddleware, async (req, res) => {
  리워드 관련 (원래 knex 스타일이었음 → 여기서는 미구현으로 처리)
 ------------------------- */
 app.post("/api/reward/open", authMiddleware, async (req, res) => {
-  return res.status(501).json({ msg: "Not implemented (reward.open)" });
+  try {
+    const [[user]] = await db.query(
+      "SELECT w.address FROM users u JOIN wallets1 w ON u.sub = w.sub WHERE u.id = ?",
+      [req.user.id]
+    );
+
+    if (!user || !user.address)
+      return res.status(400).json({ error: "사용자 지갑 주소가 없습니다." });
+
+    const to = user.address;
+    const amount = 1; // 지급 수량 1
+
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+
+    // 서버 지갑으로 서명 (privateKey는 .env에 넣어둠)
+    const serverWallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+
+    const tokenAddress = "0x8D930388bDd25047E70C5B874009D6CC6a54EB04";
+    const ERC20_ABI = [
+      "function mint(address to, uint256 amount) public",
+    ];
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, serverWallet);
+
+    // 민팅
+    const tx = await tokenContract.mint(to, amount);
+    await tx.wait();
+
+    res.json({
+      success: true,
+      contractAddress: tokenAddress,
+      to,
+      amount
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.get("/api/reward/history", authMiddleware, async (req, res) => {
-  return res.status(501).json({ msg: "Not implemented (reward.history)" });
+app.get("/api/reward/history", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `
+      SELECT a.str, u.id AS userId, a.answered_at
+      FROM answers a
+      JOIN users u ON a.sub = u.sub
+      ORDER BY a.answered_at ASC
+      `
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 /* -------------------------

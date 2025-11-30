@@ -10,6 +10,7 @@ import NFTList from "./pages/NFTList";
 import NFTDetail from "./pages/NFTDetail";
 import MyPage from "./pages/MyPage";
 import UserEdit from "./pages/UserEdit";
+import Reward from "./pages/Reward";
 
 const navigation = [
   { name: "Game", href: "/game" },
@@ -173,6 +174,7 @@ export default function App() {
           <Route path="/nfts/:id" element={<NFTDetail />} />
           <Route path="/mypage" element={<MyPage />} />
           <Route path="/mypage/edit" element={<UserEdit />} />
+          <Route path="/reward" element={<Reward />} />
           <Route path="/nft/:contractAddress/:tokenID" element={<NFTDetail userSub={user?.sub} userAddress={user?.wallet_address} />} />
         </Routes>
       </main>

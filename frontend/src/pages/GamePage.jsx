@@ -15,7 +15,7 @@ export default function GamePage() {
   // 로그인 체크
   useEffect(() => {
     API.get("/api/me")
-      .then(res => setUser(res.data))
+      .then(res => {console.log("me data:", res.data);setUser(res.data)})
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
@@ -30,26 +30,31 @@ export default function GamePage() {
   }, [user]);
 
   const submit = async () => {
-    if (!input || input.length > 20) {
-      alert("20자 이하의 문자열만 입력 가능");
+  if (!input || input.length > 20) {
+    alert("20자 이하의 문자열만 입력 가능");
+    return;
+  }
+
+  try {
+    if (!user?.sub) {
+      alert("사용자 정보(sub)가 없습니다. 다시 로그인해주세요.");
       return;
     }
 
-    try {
-      const res = await API.post("/api/game/submit", { input });
-      setResult(res.data);
+    const res = await API.post("/api/game/submit", { input, sub: user.sub });
+    setResult(res.data);
 
-      if (res.data.success && !res.data.duplicate) {
-        navigate("/reward");
-      } else if (res.data.duplicate) {
-        alert("이미 제출된 값입니다. 다른 문자열을 입력해주세요.");
-      } else {
-        alert("실패 ❌ 범위 밖입니다. 다시 입력해주세요.");
-      }
-    } catch (e) {
-      alert("서버 오류");
+    if (res.data.success && !res.data.duplicate) {
+      navigate("/reward");
+    } else if (res.data.duplicate) {
+      alert("이미 제출된 값입니다. 다른 문자열을 입력해주세요.");
+    } else {
+      alert("실패 ❌ 범위 밖입니다. 다시 입력해주세요.");
     }
-  };
+  } catch (e) {
+    alert("서버 오류");
+  }
+};
 
   if (loading)
     return <div className="text-white text-center py-40 text-2xl">Loading...</div>;
@@ -105,16 +110,24 @@ export default function GamePage() {
           <p className="text-gray-400 text-sm">아직 지급된 NFT가 없습니다.</p>
         )}
 
-        {rewardHistory.map(item => (
-          <div key={item.id} className="mb-6 bg-gray-800/50 p-4 rounded-xl border border-gray-700 shadow">
-            <img
-              src={`https://picsum.photos/200?reward=${item.address}`}
-              className="rounded-lg w-full mb-3"
-            />
-            <p className="text-yellow-400 font-semibold">{item.address}</p>
-            <p className="text-gray-400 text-xs mt-1">{item.created_at}</p>
+      {[...rewardHistory]
+        .sort((a, b) => new Date(b.answered_at.replace(" ", "T")) - new Date(a.answered_at.replace(" ", "T")))
+        .map(item => (
+          <div
+            key={item.answered_at}
+            className="mb-6 bg-gray-800/50 p-4 rounded-xl border border-gray-700 shadow"
+          >
+            <p className="text-lg font-semibold text-yellow-400 break-all">
+              제출 문자열: {item.str}
+            </p>
+            <p className="text-indigo-300 text-sm mt-1">
+              제출한 사람 ID: {item.userId}
+            </p>
+            <p className="text-gray-400 text-xs mt-2">
+              {new Date(item.answered_at.replace(" ", "T")).toLocaleString("ko-KR")}
+            </p>
           </div>
-        ))}
+      ))}
       </aside>
     </div>
   );
