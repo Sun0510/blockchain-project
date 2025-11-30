@@ -57,7 +57,7 @@ export default function NFTList() {
               <b>Token ID:</b> {item.tokenID}
             </p>
             <p style={{ fontSize: 14, margin: 4 }}>
-              <b>소유자:</b> {item.ownerid ?? "미보유 (No Owner)"}
+              <b>소유자:</b> {item.ownerId ?? "미보유 (No Owner)"}
             </p>
           </div>
         ))}

@@ -196,7 +196,7 @@ function authMiddleware(req, res, next) {
 app.get('/api/me', authMiddleware, async (req, res) => {
   try {
     const [[user]] = await db.query(
-      `SELECT u.id, u.email, u.name, w.address AS wallet_address
+      `SELECT u.sub, u.id, u.email, u.name, w.address AS wallet_address
        FROM users u
        LEFT JOIN wallets1 w ON u.sub = w.sub
        WHERE u.id = ?`,
@@ -266,6 +266,67 @@ app.get("/api/download-private-key", authMiddleware, async (req, res) => {
 });
 
 /* -------------------------
+ 회원 정보 수정
+------------------------- */
+
+app.put("/users/update", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { name, id } = req.body;
+
+    const [rows] = await db.query("SELECT name, id FROM users WHERE id = ?", [userId]);
+    if (rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const current = rows[0];
+
+    const newName = name?.trim() === "" ? current.name : name.trim();
+    const newId = id?.trim() === "" ? current.id : id.trim();
+
+    if (id?.trim() !== "" && newId !== current.id) {
+      const [dupCheck] = await db.query(
+        "SELECT id FROM users WHERE id = ? AND id != ?",
+        [newId, current.id]
+      );
+      if (dupCheck.length > 0) return res.status(409).json({ error: "이미 사용 중인 ID입니다." });
+    }
+
+    // DB 업데이트
+    await db.query("UPDATE users SET name = ?, id = ? WHERE id = ?", [newName, newId, current.id]);
+
+    // 🔹 JWT 재발급
+    const newToken = signToken({ id: newId });
+    res.cookie("token", newToken, {
+      httpOnly: true,
+      secure: false, // 배포 시 true
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    return res.json({ success: true, name: newName, id: newId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error", details: err.message });
+  }
+});
+
+
+
+
+
+app.post("/users/check-id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id || id.trim() === "") return res.status(400).json({ error: "ID를 입력해주세요." });
+
+    const [rows] = await db.query("SELECT id FROM users WHERE id = ?", [id.trim()]);
+    res.json({ available: rows.length === 0 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+/* -------------------------
  로그아웃
 ------------------------- */
 app.post('/api/logout', (req, res) => {
@@ -279,9 +340,8 @@ app.post('/api/logout', (req, res) => {
 app.get("/api/nfts", async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT nfts.tokenID, nfts.address AS contractAddress, users.id AS ownerid
+      SELECT nfts.tokenID, nfts.address AS contractAddress
       FROM nfts
-      LEFT JOIN users ON users.sub = nfts.nft_owner
     `);
 
     const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
@@ -290,20 +350,49 @@ app.get("/api/nfts", async (req, res) => {
     for (const row of rows) {
       const NFTABI = JSON.parse(fs.readFileSync("./abi/SHINUNFT.json", "utf8"));
       const contract = new ethers.Contract(row.contractAddress, NFTABI, provider);
-      const tokenURI = await contract.tokenURI(row.tokenID);
-      const metadataURL = tokenURI;
-      const metadata = (await axios.get(metadataURL, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; NFTFetcher/1.0)'
-        }
-      })).data;
       
+      // tokenURI 가져오기
+      const tokenURI = await contract.tokenURI(row.tokenID);
+      const metadata = (await axios.get(tokenURI, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NFTFetcher/1.0)' }
+      })).data;
+
+      // 스마트 컨트랙트에서 실제 소유자 지갑 조회
+      let onChainOwner = null;
+      let walletSub = null;
+      let ownerId = null;
+      
+      try {
+        onChainOwner = await contract.ownerOf(row.tokenID);
+
+        // wallet1에서 sub 조회
+        const [walletRows] = await db.query(
+          "SELECT sub FROM wallets1 WHERE address = ?",
+          [onChainOwner]
+        );
+        if (walletRows.length > 0) {
+          walletSub = walletRows[0].sub;
+
+          // users에서 id 조회
+          const [userRows] = await db.query(
+            "SELECT id FROM users WHERE sub = ?",
+            [walletSub]
+          );
+          if (userRows.length > 0) {
+            ownerId = userRows[0].id;
+          }
+        }
+      } catch (err) {
+        console.warn(`⚠️ ownerOf 조회 실패 tokenID=${row.tokenID}:`, err.message);
+      }
+
       nftArray.push({
         tokenID: row.tokenID,
         contractAddress: row.contractAddress,
         name: metadata.name,
         image: metadata.image,
-        ownerid: row.ownerid || null
+        onChainOwner,  
+        ownerId     // 최종 users 테이블 id
       });
     }
 
@@ -314,7 +403,100 @@ app.get("/api/nfts", async (req, res) => {
   }
 });
 
+/* -------------------------
+ NFT Detail, NFT 거래
+------------------------- */
+// trade 테이블 정보 확인
+app.get("/api/trades/:contractAddress/:tokenID", async (req, res) => {
+  const { contractAddress, tokenID } = req.params;
+  try {
+    const [rows] = await db.query(
+      "SELECT * FROM trades WHERE tokenID=? AND address=? AND receiver IS NULL",
+      [tokenID, contractAddress]
+    );
+    return res.json({ success: true, trades: rows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 
+// trades 전체 조회
+app.get("/api/trades", async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT * FROM trades");
+    res.json({ success: true, result: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// NFT 판매/구매 관련 API
+  app.post("/api/trades/:action", async (req, res) => {
+  const { action } = req.params; // sell, updatePrice, cancel, buy
+  const { tokenID, contractAddress, price, userSub, seq } = req.body;
+
+  try {
+    if (action === "sell") {
+      // 판매 등록
+      await db.query(
+        "INSERT INTO trades (tokenID, address, price, nft_owner) VALUES (?, ?, ?, ?)",
+        [tokenID, contractAddress, price, userSub]
+      );
+      return res.json({ success: true, message: "판매 등록 완료" });
+    }
+
+    if (action === "updatePrice") {
+      // 가격 수정
+      await db.query(
+        "UPDATE trades SET price = ? WHERE tokenID = ? AND address = ?",
+        [price, tokenID, contractAddress]
+      );
+      return res.json({ success: true, message: "가격 수정 완료" });
+    }
+
+    if (action === "cancel") {
+      // 거래 취소
+      await db.query(
+        "DELETE FROM trades WHERE tokenID = ? AND address = ?",
+        [tokenID, contractAddress]
+      );
+      return res.json({ success: true, message: "거래 취소 완료" });
+    }
+
+    if (action === "buy") {
+      // provider
+      const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+
+      // NFT ABI
+      const NFTABI = JSON.parse(fs.readFileSync("./abi/SHINUNFT.json", "utf8"));
+
+      // 이후 ownerWallet, buyerAddress 준비 후
+      const ownerWallet = wallet.connect(provider);
+      const nftContract = new ethers.Contract(trade.address, NFTABI, ownerWallet);
+
+      // ETH 전송
+      const txETH = await ownerWallet.sendTransaction({
+        to: buyerAddress,
+        value: ethers.parseEther(trade.price.toString())
+      });
+      await txETH.wait();
+
+      // NFT 전송
+      const txNFT = await nftContract.transferFrom(ownerWallet.address, buyerAddress, trade.tokenID);
+      await txNFT.wait();
+
+      await db.query("UPDATE trades SET receiver = ? WHERE seq = ?", [userSub, seq]);
+      return res.json({ success: true, message: "NFT 구매 완료" });
+    }
+
+    res.status(400).json({ success: false, message: "Unknown action" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 /* -------------------------
  게임 제출 API
