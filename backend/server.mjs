@@ -236,7 +236,7 @@ app.get("/api/balances", authMiddleware, async (req, res) => {
     const ethBalance = parseFloat(ethers.formatEther(balanceWei)).toFixed(4);
 
     // 2️⃣ ERC20 토큰 잔액
-    const tokenAddress = "0x8D930388bDd25047E70C5B874009D6CC6a54EB04";
+    const tokenAddress = process.env.TOKEN_ADDRESS;
     const ERC20_ABI = [
       "function balanceOf(address owner) view returns (uint256)",
       "function decimals() view returns (uint8)"
@@ -447,6 +447,88 @@ app.get("/api/nfts", async (req, res) => {
 });
 
 /* -------------------------
+ 환전하기
+------------------------- */
+app.post("/api/exchange", authMiddleware, async (req, res) => {
+  try {
+    const { amount } = req.body;
+    if (!amount || isNaN(amount) || amount <= 0) {
+      return res.status(400).json({ error: "Invalid amount" });
+    }
+
+    // 1) 사용자 id -> sub 조회
+    const [[userRow]] = await db.query("SELECT sub FROM users WHERE id=?", [req.user.id]);
+    if (!userRow) return res.status(404).json({ message: "User not found" });
+    const sub = userRow.sub;
+
+    if (!userRow) return res.status(400).json({ error: "지갑 정보 없음" });
+
+    // 2) wallets1, wallets2 조회
+    const [w1rows] = await db.query("SELECT encrypted_key, address FROM wallets1 WHERE sub=?", [sub]);
+    const [w2rows] = await db.query("SELECT encrypted_key, pw FROM wallets2 WHERE sub=?", [sub]);
+
+    if (w1rows.length === 0 || w2rows.length === 0) {
+      return res.status(404).json({ message: "Wallet not found" });
+    }
+
+    const w1 = w1rows[0];
+    const w2 = w2rows[0];
+
+    // 3) encryptedKey 재조합
+    const fullEncryptedKey = String(w1.encrypted_key) + String(w2.encrypted_key);
+    const walletPassword = w2.pw;
+
+    // 4) 복호화 (ethers)
+    // 사용자 지갑 객체 생성
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const wallet = await ethers.Wallet.fromEncryptedJson(fullEncryptedKey, walletPassword);
+    const privateKey = wallet.privateKey; // 0x....
+    const userWallet = new ethers.Wallet(privateKey, provider);
+    const userAddress = userWallet.address;
+
+    // 서버 지갑
+    const serverWallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+    const serverAddress = serverWallet.address;
+
+    // 토큰 컨트랙트
+    const tokenAddress = process.env.TOKEN_ADDRESS;
+    const ERC20_ABI = [
+      "function transfer(address to, uint amount) public returns (bool)",
+      "function decimals() public view returns (uint8)"
+    ];
+    const tokenContractUser = new ethers.Contract(tokenAddress, ERC20_ABI, userWallet);
+
+    // 소수점 조회
+    const rawAmount = ethers.parseUnits(amount.toString(), 0);
+
+    //  사용자 → 서버  토큰 전송
+    const txToken = await tokenContractUser.transfer(serverAddress, rawAmount);
+    await txToken.wait();
+
+    // 비율 계산 1 token = 0.0001 ETH
+    const ethAmount = ethers.parseEther((amount * 0.0001).toString());
+
+    // 서버 → 사용자 ETH 송금
+    const txETH = await serverWallet.sendTransaction({
+      to: userAddress,
+      value: ethAmount,
+    });
+    await txETH.wait();
+
+    return res.json({
+      success: true,
+      message: `사용자로부터 ${amount} Token을 받고 ${ethers.formatEther(ethAmount)} ETH 전송 완료`,
+      ethReceived: ethers.formatEther(ethAmount)
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "환전 실패", details: err.message });
+  }
+});
+
+
+/* -------------------------
  NFT Detail, NFT 거래
 ------------------------- */
 // trade 테이블 정보 확인
@@ -612,7 +694,7 @@ app.post("/api/reward/open", authMiddleware, async (req, res) => {
     // 서버 지갑으로 서명 (privateKey는 .env에 넣어둠)
     const serverWallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
-    const tokenAddress = "0x8D930388bDd25047E70C5B874009D6CC6a54EB04";
+    const tokenAddress = process.env.TOKEN_ADDRESS;
     const ERC20_ABI = [
       "function mint(address to, uint256 amount) public",
     ];

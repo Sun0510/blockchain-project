@@ -8,9 +8,11 @@ export default function MyPage({ userSub, userAddress }) {
   const [downloading, setDownloading] = useState(false);
   const [nfts, setNfts] = useState([]);
   const [trades, setTrades] = useState([]);
+  const [exchangeAmount, setExchangeAmount] = useState("");
 
   const navigate = useNavigate();
 
+  // 사용자 정보 + NFT + 거래 데이터 조회
   useEffect(() => {
     async function fetchData() {
       try {
@@ -50,6 +52,7 @@ export default function MyPage({ userSub, userAddress }) {
     fetchData();
   }, []);
 
+  // 개인키 다운로드
   const downloadPrivateKey = async () => {
     try {
       setDownloading(true);
@@ -69,8 +72,30 @@ export default function MyPage({ userSub, userAddress }) {
     }
   };
 
-  if (loading) return <div className="text-white text-center py-40 text-2xl">Loading...</div>;
-  if (!user) return <div className="text-white text-center py-40 text-2xl">로그인이 필요합니다</div>;
+  // 토큰 → ETH 환전
+  const handleExchange = async () => {
+    if (!exchangeAmount || isNaN(exchangeAmount) || exchangeAmount <= 0) {
+      alert("환전할 토큰 개수를 올바르게 입력해주세요.");
+      return;
+    }
+    try {
+      const res = await API.post("/api/exchange", {
+        amount: parseFloat(exchangeAmount),
+      });
+      alert(`환전 완료! ${res.data.ethReceived} ETH를 받았습니다.`);
+      // 잔액 업데이트
+      const updatedUser = await API.get("/api/me");
+      setUser(updatedUser.data);
+    } catch (err) {
+      console.error(err);
+      alert("환전 실패: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  if (loading)
+    return <div className="text-white text-center py-40 text-2xl">Loading...</div>;
+  if (!user)
+    return <div className="text-white text-center py-40 text-2xl">로그인이 필요합니다</div>;
 
   return (
     <div className="py-32 px-6 text-white max-w-4xl mx-auto">
@@ -92,11 +117,28 @@ export default function MyPage({ userSub, userAddress }) {
           {downloading ? "다운로드 중..." : "개인키 TXT 다운로드"}
         </button>
         <button
-            onClick={() => navigate("/mypage/edit")}
-            className="px-5 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-semibold"
+          onClick={() => navigate("/mypage/edit")}
+          className="ml-3 px-5 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-semibold"
+        >
+          회원 정보 수정
+        </button>
+
+        {/* 환전 섹션 */}
+        <div className="mt-5">
+          <input
+            type="number"
+            value={exchangeAmount}
+            onChange={(e) => setExchangeAmount(e.target.value)}
+            placeholder="교환할 Token 개수"
+            className="px-3 py-2 rounded-lg text-black w-48 mr-3"
+          />
+          <button
+            onClick={handleExchange}
+            className="px-5 py-2 bg-yellow-500 hover:bg-yellow-600 rounded-lg font-semibold"
           >
-            회원 정보 수정
+            환전하기
           </button>
+        </div>
       </div>
 
       {/* NFT 목록 */}
@@ -139,7 +181,9 @@ export default function MyPage({ userSub, userAddress }) {
                   ) : trade ? (
                     <>
                       <p>판매 가격: {trade.price} ETH</p>
-                      <button className="mt-2 px-3 py-1 bg-indigo-600 rounded">구매하기</button>
+                      <button className="mt-2 px-3 py-1 bg-indigo-600 rounded">
+                        구매하기
+                      </button>
                     </>
                   ) : (
                     <p>미판매중</p>
