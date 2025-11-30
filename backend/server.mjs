@@ -12,6 +12,9 @@ import { OAuth2Client } from "google-auth-library";
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import axios from "axios";
+
+
 
 /* -------------------------
  환경 변수 / 기본값 체크
@@ -269,6 +272,49 @@ app.post('/api/logout', (req, res) => {
   res.clearCookie("token");
   res.json({ ok: true });
 });
+
+/* -------------------------
+ NFT 목록
+------------------------- */
+app.get("/api/nfts", async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT nfts.tokenID, nfts.address AS contractAddress, users.id AS ownerid
+      FROM nfts
+      LEFT JOIN users ON users.sub = nfts.nft_owner
+    `);
+
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+
+    const nftArray = [];
+    for (const row of rows) {
+      const NFTABI = JSON.parse(fs.readFileSync("./abi/SHINUNFT.json", "utf8"));
+      const contract = new ethers.Contract(row.contractAddress, NFTABI, provider);
+      const tokenURI = await contract.tokenURI(row.tokenID);
+      const metadataURL = tokenURI;
+      const metadata = (await axios.get(metadataURL, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; NFTFetcher/1.0)'
+        }
+      })).data;
+      
+      nftArray.push({
+        tokenID: row.tokenID,
+        contractAddress: row.contractAddress,
+        name: metadata.name,
+        image: metadata.image,
+        ownerid: row.ownerid || null
+      });
+    }
+
+    return res.json({ success: true, result: nftArray });
+  } catch (e) {
+    console.error("❌ /nfts error:", e);
+    return res.status(500).json({ success: false, error: "NFT 조회 실패" });
+  }
+});
+
+
 
 /* -------------------------
  게임 제출 API
