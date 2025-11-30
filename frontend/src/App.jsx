@@ -21,14 +21,41 @@ const navigation = [
 export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [ethBalance, setEthBalance] = useState("-");
+  const [tokenBalance, setTokenBalance] = useState("-");
   const navigate = useNavigate();
 
-  // 로그인 상태 확인
+  // 로그인 상태 확인 및 사용자 정보 가져오기
   useEffect(() => {
-    API.get("/api/me")
-      .then((res) => setUser(res.data))
-      .catch(() => setUser(null));
+    const fetchUser = async () => {
+      try {
+        const res = await API.get("/api/me");
+        setUser(res.data);
+      } catch {
+        setUser(null);
+      }
+    };
+    fetchUser();
   }, []);
+
+  // 잔액 조회 (ETH + ERC20 Token)
+  useEffect(() => {
+    const fetchBalances = async () => {
+      if (!user) return;
+
+      try {
+        const res = await API.get("/api/balances");
+        setEthBalance(res.data.ethBalance);
+        setTokenBalance(res.data.tokenBalance);
+      } catch (err) {
+        console.error("잔액 조회 실패:", err);
+        setEthBalance("N/A");
+        setTokenBalance("N/A");
+      }
+    };
+
+    fetchBalances();
+  }, [user]);
 
   // 로그아웃
   const handleLogout = () => {
@@ -42,7 +69,7 @@ export default function App() {
     <div className="bg-gray-900 min-h-screen">
       {/* HEADER */}
       <header className="absolute inset-x-0 top-0 z-50">
-        <nav className="flex items-center justify-between p-6 lg:px-8" aria-label="Global">
+        <nav className="flex items-center justify-between p-6 lg:px-8">
           <div className="flex lg:flex-1">
             <Link to="/" className="-m-1.5 p-1.5">
               <img
@@ -53,18 +80,7 @@ export default function App() {
             </Link>
           </div>
 
-          {/* mobile menu button */}
-          <div className="flex lg:hidden">
-            <button
-              type="button"
-              className="-m-2.5 inline-flex items-center justify-center rounded-md p-2.5 text-gray-200"
-              onClick={() => setMobileMenuOpen(true)}
-            >
-              <Bars3Icon className="size-6" aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* pc navigation */}
+          {/* PC 메뉴 */}
           <div className="hidden lg:flex lg:gap-x-12">
             {navigation.map((item) => (
               <Link
@@ -77,8 +93,15 @@ export default function App() {
             ))}
           </div>
 
-          {/* login / logout button */}
-          <div className="hidden lg:flex lg:flex-1 lg:justify-end">
+          {/* ID / 잔액 / 로그인 */}
+          <div className="hidden lg:flex lg:flex-1 lg:justify-end items-center space-x-6">
+            {user && (
+              <>
+                <span className="text-white font-semibold">ID: {user.id}</span>
+                <span className="text-gray-200">sepoliaETH: {ethBalance}</span>
+                <span className="text-yellow-400 font-bold">SHINU: {tokenBalance}</span>
+              </>
+            )}
             {user ? (
               <button
                 onClick={handleLogout}
@@ -94,6 +117,17 @@ export default function App() {
                 Login →
               </Link>
             )}
+          </div>
+
+          {/* 모바일 메뉴 버튼 */}
+          <div className="flex lg:hidden">
+            <button
+              type="button"
+              className="-m-2.5 inline-flex items-center justify-center rounded-md p-2.5 text-gray-200"
+              onClick={() => setMobileMenuOpen(true)}
+            >
+              <Bars3Icon className="h-6 w-6" aria-hidden="true" />
+            </button>
           </div>
         </nav>
 
@@ -114,7 +148,7 @@ export default function App() {
                 onClick={() => setMobileMenuOpen(false)}
                 className="-m-2.5 p-2.5 rounded-md text-gray-200"
               >
-                <XMarkIcon className="size-6" aria-hidden="true" />
+                <XMarkIcon className="h-6 w-6" aria-hidden="true" />
               </button>
             </div>
 
@@ -162,9 +196,7 @@ export default function App() {
             element={
               <div className="text-center text-white py-32">
                 <h1 className="text-5xl font-bold">HashSh</h1>
-                <p className="mt-4 text-gray-400">
-                  Uncrypt, get tokens and have NFTs!
-                </p>
+                <p className="mt-4 text-gray-400">Uncrypt, get tokens and have NFTs!</p>
               </div>
             }
           />
@@ -175,7 +207,12 @@ export default function App() {
           <Route path="/mypage" element={<MyPage />} />
           <Route path="/mypage/edit" element={<UserEdit />} />
           <Route path="/reward" element={<Reward />} />
-          <Route path="/nft/:contractAddress/:tokenID" element={<NFTDetail userSub={user?.sub} userAddress={user?.wallet_address} />} />
+          <Route
+            path="/nft/:contractAddress/:tokenID"
+            element={
+              <NFTDetail userSub={user?.sub} userAddress={user?.wallet_address} />
+            }
+          />
         </Routes>
       </main>
     </div>

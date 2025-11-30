@@ -212,6 +212,49 @@ app.get('/api/me', authMiddleware, async (req, res) => {
 });
 
 /* -------------------------
+ 사용자 잔액 조회
+------------------------- */
+// server.mjs 중간에 추가
+
+// ERC20 잔액 조회 API
+app.get("/api/balances", authMiddleware, async (req, res) => {
+  try {
+    // 사용자 지갑 주소 조회
+    const [[user]] = await db.query(
+      "SELECT w.address AS wallet_address FROM users u LEFT JOIN wallets1 w ON u.sub = w.sub WHERE u.id=?",
+      [req.user.id]
+    );
+
+    if (!user || !user.wallet_address) {
+      return res.status(404).json({ error: "Wallet not found" });
+    }
+
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+
+    // 1️⃣ Sepolia ETH 잔액
+    const balanceWei = await provider.getBalance(user.wallet_address);
+    const ethBalance = parseFloat(ethers.formatEther(balanceWei)).toFixed(4);
+
+    // 2️⃣ ERC20 토큰 잔액
+    const tokenAddress = "0x8D930388bDd25047E70C5B874009D6CC6a54EB04";
+    const ERC20_ABI = [
+      "function balanceOf(address owner) view returns (uint256)",
+      "function decimals() view returns (uint8)"
+    ];
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+
+    const rawTokenBalance = await tokenContract.balanceOf(user.wallet_address);
+    const tokenBalance = parseFloat(ethers.formatUnits(rawTokenBalance, 0)).toFixed(0);
+
+    res.json({ ethBalance, tokenBalance });
+  } catch (err) {
+    console.error("잔액 조회 실패:", err);
+    res.status(500).json({ ethBalance: "N/A", tokenBalance: "N/A", error: err.message });
+  }
+});
+
+
+/* -------------------------
  사용자 개인키 다운로드
 ------------------------- */
 app.get("/api/download-private-key", authMiddleware, async (req, res) => {
