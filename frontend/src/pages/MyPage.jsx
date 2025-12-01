@@ -171,23 +171,14 @@ export default function MyPage({ userSub, userAddress }) {
 
                 <div className="mt-3 text-sm">
                   {isOwner ? (
-                    !trade ? (
+                    !trade || trade.receiver !== null ? (
                       <p className="text-green-400 font-semibold mt-1">판매 등록 가능</p>
                     ) : (
                       <p className="text-yellow-400 font-semibold mt-1">
                         판매중 — {trade.price} ETH
                       </p>
                     )
-                  ) : trade ? (
-                    <div>
-                      <p className="text-yellow-400 font-semibold">판매 가격: {trade.price} ETH</p>
-                      <button className="mt-2 px-3 py-1 bg-indigo-600 rounded hover:bg-indigo-700 font-semibold transition">
-                        구매하기
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-gray-400">미판매중</p>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );

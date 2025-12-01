@@ -498,7 +498,7 @@ app.post("/api/exchange", authMiddleware, async (req, res) => {
     // 사용자 지갑 객체 생성
     const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
     const wallet = await ethers.Wallet.fromEncryptedJson(fullEncryptedKey, walletPassword);
-    const privateKey = wallet.privateKey; // 0x....
+    const privateKey = wallet.privateKey;
     const userWallet = new ethers.Wallet(privateKey, provider);
     const userAddress = userWallet.address;
 
@@ -574,7 +574,7 @@ app.get("/api/trades", async (req, res) => {
 });
 
 // NFT 판매/구매 관련 API
-  app.post("/api/trades/:action", async (req, res) => {
+app.post("/api/trades/:action", authMiddleware, async (req, res) => {
   const { action } = req.params; // sell, updatePrice, cancel, buy
   const { tokenID, contractAddress, price, userSub, seq } = req.body;
 
@@ -607,30 +607,82 @@ app.get("/api/trades", async (req, res) => {
     }
 
     if (action === "buy") {
-      // provider
-      const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+      try {
+        // ① 거래 조회
+        const [[trade]] = await db.query("SELECT * FROM trades WHERE seq=?", [seq]);
+        if (!trade) return res.status(404).json({ message: "거래 없음" });
 
-      // NFT ABI
-      const NFTABI = JSON.parse(fs.readFileSync("./abi/SHINUNFT.json", "utf8"));
+        const tokenID = trade.tokenID;
+        const price = trade.price;
+        const nftAddress = trade.address;
+        const sellerSub = trade.nft_owner;  // 판매자의 sub 저장되어 있다고 가정
 
-      // 이후 ownerWallet, buyerAddress 준비 후
-      const ownerWallet = wallet.connect(provider);
-      const nftContract = new ethers.Contract(trade.address, NFTABI, ownerWallet);
+        // ② 구매자 sub 조회
+        const [[buyerRow]] = await db.query("SELECT sub FROM users WHERE id=?", [req.user.id]);
+        const buyerSub = buyerRow.sub;
 
-      // ETH 전송
-      const txETH = await ownerWallet.sendTransaction({
-        to: buyerAddress,
-        value: ethers.parseEther(trade.price.toString())
+        const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+
+        // ================ 구매자 지갑 복호화 ================
+        const [bw1] = await db.query("SELECT encrypted_key, address FROM wallets1 WHERE sub=?", [buyerSub]);
+        const [bw2] = await db.query("SELECT encrypted_key, pw FROM wallets2 WHERE sub=?", [buyerSub]);
+        if (bw1.length === 0 || bw2.length === 0) return res.status(404).json({ message: "구매자 지갑 없음" });
+
+        const buyerEncrypted = String(bw1[0].encrypted_key) + String(bw2[0].encrypted_key);
+        const buyerWalletPw = bw2[0].pw;
+        const buyerWalletDecrypted = await ethers.Wallet.fromEncryptedJson(buyerEncrypted, buyerWalletPw);
+        const buyerWallet = new ethers.Wallet(buyerWalletDecrypted.privateKey, provider);
+        const buyerAddress = buyerWallet.address;
+
+        // ================ 판매자 지갑 복호화 ================
+        const [sw1] = await db.query("SELECT encrypted_key, address FROM wallets1 WHERE sub=?", [sellerSub]);
+        const [sw2] = await db.query("SELECT encrypted_key, pw FROM wallets2 WHERE sub=?", [sellerSub]);
+        if (sw1.length === 0 || sw2.length === 0) return res.status(404).json({ message: "판매자 지갑 없음" });
+
+        const sellerEncrypted = String(sw1[0].encrypted_key) + String(sw2[0].encrypted_key);
+        const sellerWalletPw = sw2[0].pw;
+        const sellerWalletDecrypted = await ethers.Wallet.fromEncryptedJson(sellerEncrypted, sellerWalletPw);
+        const sellerWallet = new ethers.Wallet(sellerWalletDecrypted.privateKey, provider);
+        const sellerAddress = sellerWallet.address;
+
+        // ================ NFT ABI 로드 ================
+        const NFTABI = JSON.parse(fs.readFileSync("./abi/SHINUNFT.json", "utf8"));
+        const nftContract = new ethers.Contract(nftAddress, NFTABI, sellerWallet);
+
+        // ================ 1) 구매자가 판매자에게 ETH 전송 ================
+        const txETH = await buyerWallet.sendTransaction({
+          to: sellerAddress,
+          value: ethers.parseEther(price.toString()),
+        });
+        await txETH.wait();
+
+        // ================ 2) 판매자가 구매자에게 NFT 전송 ================
+        const txNFT = await nftContract.transferFrom(sellerAddress, buyerAddress, tokenID);
+        await txNFT.wait();
+
+        // ================ DB 업데이트 ================
+        await db.query(
+          "UPDATE trades SET receiver=?, completed_at=NOW() WHERE seq=?", 
+          [buyerSub, seq]
+        );
+
+        return res.json({
+          success: true,
+          message: "NFT 구매 성공",
+          buyer: buyerAddress,
+          seller: sellerAddress,
+          price
+        });
+
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({
+          success: false,
+          message: "서버 내부 오류가 발생했습니다.",
+          error: err.message
       });
-      await txETH.wait();
-
-      // NFT 전송
-      const txNFT = await nftContract.transferFrom(ownerWallet.address, buyerAddress, trade.tokenID);
-      await txNFT.wait();
-
-      await db.query("UPDATE trades SET receiver = ? WHERE seq = ?", [userSub, seq]);
-      return res.json({ success: true, message: "NFT 구매 완료" });
     }
+  }
 
     res.status(400).json({ success: false, message: "Unknown action" });
   } catch (err) {
