@@ -249,7 +249,7 @@ app.get("/api/balances", authMiddleware, async (req, res) => {
 
     // 1️⃣ Sepolia ETH 잔액
     const balanceWei = await provider.getBalance(user.wallet_address);
-    const ethBalance = parseFloat(ethers.formatEther(balanceWei)).toFixed(4);
+    const ethBalance = parseFloat(ethers.formatEther(balanceWei)).toFixed(8);
 
     // 2️⃣ ERC20 토큰 잔액
     const tokenAddress = process.env.TOKEN_ADDRESS;
