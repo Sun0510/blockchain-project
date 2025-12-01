@@ -109,8 +109,6 @@ export default function Reward() {
             <p>토큰 컨트랙트 주소:</p>
             <p className="text-yellow-400 font-bold break-all">{rewardResult.contractAddress}</p>
 
-            <p>TX Hash:</p>
-            <p className="text-indigo-300 break-all">{rewardResult.txHash}</p>
           </div>
 
           <button
