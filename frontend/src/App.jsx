@@ -25,7 +25,7 @@ export default function App() {
   const [tokenBalance, setTokenBalance] = useState("-");
   const navigate = useNavigate();
 
-  // 로그인 상태 확인 및 사용자 정보 가져오기
+  // 로그인 상태 확인
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -38,22 +38,19 @@ export default function App() {
     fetchUser();
   }, []);
 
-  // 잔액 조회 (ETH + ERC20 Token)
+  // 잔액 조회
   useEffect(() => {
     const fetchBalances = async () => {
       if (!user) return;
-
       try {
         const res = await API.get("/api/balances");
         setEthBalance(res.data.ethBalance);
         setTokenBalance(res.data.tokenBalance);
-      } catch (err) {
-        console.error("잔액 조회 실패:", err);
+      } catch {
         setEthBalance("N/A");
         setTokenBalance("N/A");
       }
     };
-
     fetchBalances();
   }, [user]);
 
@@ -83,17 +80,13 @@ export default function App() {
           {/* PC 메뉴 */}
           <div className="hidden lg:flex lg:gap-x-12">
             {navigation.map((item) => (
-              <Link
-                key={item.name}
-                to={item.href}
-                className="text-sm font-semibold text-white"
-              >
+              <Link key={item.name} to={item.href} className="text-sm font-semibold text-white">
                 {item.name}
               </Link>
             ))}
           </div>
 
-          {/* ID / 잔액 / 로그인 */}
+          {/* 잔액 / 로그인 */}
           <div className="hidden lg:flex lg:flex-1 lg:justify-end items-center space-x-6">
             {user && (
               <>
@@ -103,17 +96,11 @@ export default function App() {
               </>
             )}
             {user ? (
-              <button
-                onClick={handleLogout}
-                className="text-sm font-semibold text-white hover:text-red-300"
-              >
+              <button onClick={handleLogout} className="text-sm font-semibold text-white hover:text-red-300">
                 Logout →
               </button>
             ) : (
-              <Link
-                to="/login"
-                className="text-sm font-semibold text-white hover:text-indigo-300"
-              >
+              <Link to="/login" className="text-sm font-semibold text-white hover:text-indigo-300">
                 Login →
               </Link>
             )}
@@ -143,11 +130,7 @@ export default function App() {
                   className="h-8 w-auto"
                 />
               </Link>
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(false)}
-                className="-m-2.5 p-2.5 rounded-md text-gray-200"
-              >
+              <button type="button" onClick={() => setMobileMenuOpen(false)} className="-m-2.5 p-2.5 rounded-md text-gray-200">
                 <XMarkIcon className="h-6 w-6" aria-hidden="true" />
               </button>
             </div>
@@ -163,7 +146,6 @@ export default function App() {
                   {item.name}
                 </Link>
               ))}
-
               {user ? (
                 <button
                   onClick={() => {
@@ -191,15 +173,53 @@ export default function App() {
       {/* PAGE CONTENT */}
       <main className="pt-24 px-6">
         <Routes>
+          {/* 메인 페이지 */}
           <Route
             path="/"
             element={
-              <div className="text-center text-white py-32">
-                <h1 className="text-5xl font-bold">HashSh</h1>
-                <p className="mt-4 text-gray-400">Uncrypt, get tokens and have NFTs!</p>
+              <div className="relative isolate overflow-hidden py-32">
+
+                {/* 배경 효과 → pointer-events-none 추가 */}
+                <div
+                  className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-br from-indigo-600/20 via-purple-600/10 to-transparent opacity-70"
+                  aria-hidden="true"
+                />
+
+                <div className="mx-auto max-w-4xl text-center">
+                  <h1 className="text-5xl font-extrabold tracking-tight text-white sm:text-6xl drop-shadow-lg">
+                    HashSh Web3 Universe
+                  </h1>
+
+                  <p className="mt-6 text-lg leading-8 text-gray-300 max-w-2xl mx-auto">
+                    🎮 게임을 플레이하고 보상을 획득하고, <br />
+                    토큰과 NFT를 소유하며 블록체인 경험을 즐겨보세요!
+                  </p>
+
+                  <div className="mt-10 flex items-center justify-center gap-6">
+                    <Link
+                      to="/game"
+                      className="rounded-xl bg-indigo-600 px-8 py-4 text-lg font-semibold text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transition-all"
+                    >
+                      게임 시작하기 →
+                    </Link>
+                    <Link
+                      to="/nfts"
+                      className="text-lg font-semibold text-gray-200 hover:text-white hover:underline"
+                    >
+                      NFT 둘러보기
+                    </Link>
+                  </div>
+                </div>
+
+                {/* 빛 효과 → pointer-events-none 추가 */}
+                <div
+                  className="absolute -top-12 left-1/2 -translate-x-1/2 w-[650px] h-[650px] rounded-full pointer-events-none bg-purple-500/10 blur-3xl"
+                  aria-hidden="true"
+                />
               </div>
             }
           />
+
           <Route path="/login" element={<Login />} />
           <Route path="/game" element={<GamePage />} />
           <Route path="/nfts" element={<NFTList />} />
@@ -209,9 +229,7 @@ export default function App() {
           <Route path="/reward" element={<Reward />} />
           <Route
             path="/nft/:contractAddress/:tokenID"
-            element={
-              <NFTDetail userSub={user?.sub} userAddress={user?.wallet_address} />
-            }
+            element={<NFTDetail userSub={user?.sub} userAddress={user?.wallet_address} />}
           />
         </Routes>
       </main>
