@@ -187,7 +187,7 @@ export default function App() {
 
                 <div className="mx-auto max-w-4xl text-center">
                   <h1 className="text-5xl font-extrabold tracking-tight text-white sm:text-6xl drop-shadow-lg">
-                    HashSh Web3 Universe
+                    HashSH Web3 Universe
                   </h1>
 
                   <p className="mt-6 text-lg leading-8 text-gray-300 max-w-2xl mx-auto">

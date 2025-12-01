@@ -10,15 +10,27 @@ export default function NFTList() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const resUser = await axios.get("http://localhost:4000/api/me", { withCredentials: true });
-        setUser(resUser.data);
+        try {
+          const resUser = await axios.get("http://localhost:4000/api/me", {
+            withCredentials: true,
+          });
+          setUser(resUser.data);
+        } catch (e) {
+          setUser(null);
+        }
 
-        const resNFTs = await axios.get("http://localhost:4000/api/nfts", { withCredentials: true });
-        const resTrades = await axios.get("http://localhost:4000/api/trades", { withCredentials: true });
+        // NFT 및 판매 정보 가져오기
+        const resNFTs = await axios.get("http://localhost:4000/api/nfts", {
+          withCredentials: true,
+        });
 
-        const nftWithTrade = resNFTs.data.result.map(nft => {
+        const resTrades = await axios.get("http://localhost:4000/api/trades", {
+          withCredentials: true,
+        });
+
+        const nftWithTrade = resNFTs.data.result.map((nft) => {
           const trade = resTrades.data.result.find(
-            t =>
+            (t) =>
               t.tokenID.toString() === nft.tokenID.toString() &&
               t.address.toLowerCase() === nft.contractAddress.toLowerCase()
           );
@@ -43,7 +55,10 @@ export default function NFTList() {
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 20 }}>
         {nfts.map((item) => {
-          const isOwner = user && item.onChainOwner?.toLowerCase() === user.wallet_address?.toLowerCase();
+          const isOwner =
+            user &&
+            item.onChainOwner?.toLowerCase() ===
+              user.wallet_address?.toLowerCase();
           const trade = item.trade;
 
           return (
@@ -51,7 +66,7 @@ export default function NFTList() {
               key={`${item.contractAddress}-${item.tokenID}`}
               style={{
                 width: 220,
-                height: 350, // 고정 높이
+                height: 350,
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -77,7 +92,9 @@ export default function NFTList() {
               />
 
               <div>
-                <h3 style={{ marginTop: 10, fontSize: 18, fontWeight: "bold" }}>{item.name}</h3>
+                <h3 style={{ marginTop: 10, fontSize: 18, fontWeight: "bold" }}>
+                  {item.name}
+                </h3>
 
                 <p style={{ fontSize: 14, margin: 4 }}>
                   <b>Token ID:</b> {item.tokenID}
@@ -87,45 +104,18 @@ export default function NFTList() {
                 <div style={{ minHeight: 22 }}>
                   {isOwner ? (
                     !trade || trade.receiver !== null ? (
-                      <span
-                        style={{
-                          padding: "3px 6px",
-                          backgroundColor: "#22c55e",
-                          color: "#000",
-                          borderRadius: 6,
-                          fontWeight: "bold",
-                          fontSize: 13,
-                        }}
-                      >
+                      <p className="text-green-400 font-semibold mt-1">
                         판매 등록 가능
-                      </span>
+                      </p>
                     ) : (
-                      <span
-                        style={{
-                          padding: "3px 6px",
-                          backgroundColor: "#facc15",
-                          color: "#000",
-                          borderRadius: 6,
-                          fontWeight: "bold",
-                          fontSize: 13,
-                        }}
-                      >
+                      <p className="text-yellow-400 font-semibold mt-1">
                         판매중 — {trade.price} ETH
-                      </span>
+                      </p>
                     )
                   ) : trade && trade.receiver === null ? (
-                    <span
-                      style={{
-                        padding: "3px 6px",
-                        backgroundColor: "#facc15",
-                        color: "#000",
-                        borderRadius: 6,
-                        fontWeight: "bold",
-                        fontSize: 13,
-                      }}
-                    >
+                    <p className="text-yellow-400 font-semibold mt-1">
                       판매중 — {trade.price} ETH
-                    </span>
+                    </p>
                   ) : null}
                 </div>
               </div>
