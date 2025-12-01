@@ -51,7 +51,7 @@ export default function NFTDetail({ userSub, userAddress }) {
   }, [nft]);
 
   const isOwner = nft?.onChainOwner?.toLowerCase() === userAddress?.toLowerCase();
-  const currentTrade = trades[0]; // 판매 중인 거래가 있으면 첫 번째
+  const currentTrade = trades[0];
   const isForSale = !!currentTrade;
 
   const handleAction = async (action) => {
@@ -63,7 +63,7 @@ export default function NFTDetail({ userSub, userAddress }) {
         contractAddress: nft.contractAddress,
         price: parseFloat(inputPrice),
         userSub,
-        seq: currentTrade?.seq // 현재 거래 seq
+        seq: currentTrade?.seq
       };
       const res = await axios.post(
         `http://localhost:4000/api/trades/${action}`,
@@ -72,7 +72,6 @@ export default function NFTDetail({ userSub, userAddress }) {
       );
       alert(res.data.message);
 
-      // 거래 정보 갱신
       const tradeRes = await axios.get(
         `http://localhost:4000/api/trades/${nft.contractAddress}/${nft.tokenID}`,
         { withCredentials: true }
@@ -84,6 +83,27 @@ export default function NFTDetail({ userSub, userAddress }) {
       alert(err.response?.data?.message || "오류 발생");
     }
   };
+
+  const inputStyle = {
+    padding: "10px",
+    borderRadius: "6px",
+    border: "1px solid #bbb",
+    backgroundColor: "#f9f9f9",
+    color: "#000",
+    width: "160px",
+    marginRight: "10px",
+    fontSize: "15px",
+  };
+
+  const buttonStyle = (bg) => ({
+    padding: "10px 14px",
+    borderRadius: "6px",
+    border: "none",
+    backgroundColor: bg,
+    color: "white",
+    cursor: "pointer",
+    fontWeight: "bold",
+  });
 
   if (loading) return <p style={{ color: "white" }}>Loading...</p>;
   if (error) return <p style={{ color: "red" }}>{error}</p>;
@@ -97,13 +117,14 @@ export default function NFTDetail({ userSub, userAddress }) {
         alt={nft.name}
         style={{ width: "100%", maxHeight: 400, objectFit: "contain", borderRadius: 10 }}
       />
+
       <div style={{ marginTop: 20, fontSize: 16 }}>
         <p><b>Token ID:</b> {nft.tokenID}</p>
         <p><b>Contract Address:</b> {nft.contractAddress}</p>
         <p><b>Owner:</b> {nft.ownerId ?? "미보유"}</p>
       </div>
 
-      <div style={{ marginTop: 20 }}>
+      <div style={{ marginTop: 25, display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
         {isOwner ? (
           !isForSale ? (
             <>
@@ -112,8 +133,11 @@ export default function NFTDetail({ userSub, userAddress }) {
                 placeholder="가격 입력"
                 value={inputPrice}
                 onChange={e => setInputPrice(e.target.value)}
+                style={inputStyle}
               />
-              <button onClick={() => handleAction("sell")}>NFT 판매하기</button>
+              <button onClick={() => handleAction("sell")} style={buttonStyle("#4e8cff")}>
+                NFT 판매하기
+              </button>
             </>
           ) : (
             <>
@@ -122,9 +146,14 @@ export default function NFTDetail({ userSub, userAddress }) {
                 type="number"
                 value={inputPrice}
                 onChange={e => setInputPrice(e.target.value)}
+                style={inputStyle}
               />
-              <button onClick={() => handleAction("updatePrice")}>가격 수정</button>
-              <button onClick={() => handleAction("cancel")}>거래 취소</button>
+              <button onClick={() => handleAction("updatePrice")} style={buttonStyle("#ffa726")}>
+                가격 수정
+              </button>
+              <button onClick={() => handleAction("cancel")} style={buttonStyle("#e53935")}>
+                거래 취소
+              </button>
             </>
           )
         ) : !isForSale ? (
@@ -132,7 +161,9 @@ export default function NFTDetail({ userSub, userAddress }) {
         ) : (
           <>
             <p>판매 가격: {currentTrade.price ?? "-"} ETH</p>
-            <button onClick={() => handleAction("buy")}>구매하기</button>
+            <button onClick={() => handleAction("buy")} style={buttonStyle("#4caf50")}>
+              구매하기
+            </button>
           </>
         )}
       </div>
