@@ -12,7 +12,7 @@ export default function MyPage({ userSub, userAddress }) {
 
   const navigate = useNavigate();
 
-  // 사용자 정보 + NFT + 거래 데이터 조회
+  // 사용자 데이터 조회
   useEffect(() => {
     async function fetchData() {
       try {
@@ -21,16 +21,13 @@ export default function MyPage({ userSub, userAddress }) {
 
         const resNFTs = await API.get("/api/nfts");
         const resTrades = await API.get("/api/trades");
-
         setTrades(resTrades.data.result);
 
-        // 사용자가 소유한 NFT만 필터링
         const myNFTs = resNFTs.data.result.filter(
           (nft) =>
             nft.onChainOwner?.toLowerCase() === resUser.data.wallet_address?.toLowerCase()
         );
 
-        // 각 NFT에 현재 거래(trade) 정보 붙이기
         const myNFTsWithTrade = myNFTs.map((nft) => {
           const trade = resTrades.data.result.find(
             (t) =>
@@ -65,7 +62,7 @@ export default function MyPage({ userSub, userAddress }) {
       link.href = url;
       link.download = "my_private_key.txt";
       link.click();
-    } catch (error) {
+    } catch {
       alert("개인키 다운로드 실패");
     } finally {
       setDownloading(false);
@@ -83,11 +80,9 @@ export default function MyPage({ userSub, userAddress }) {
         amount: parseFloat(exchangeAmount),
       });
       alert(`환전 완료! ${res.data.ethReceived} ETH를 받았습니다.`);
-      // 잔액 업데이트
       const updatedUser = await API.get("/api/me");
       setUser(updatedUser.data);
     } catch (err) {
-      console.error(err);
       alert("환전 실패: " + (err.response?.data?.error || err.message));
     }
   };
@@ -102,42 +97,48 @@ export default function MyPage({ userSub, userAddress }) {
       <h1 className="text-4xl font-bold mb-10">My Page</h1>
 
       {/* 유저 정보 */}
-      <div className="bg-gray-800/40 p-8 rounded-2xl border border-gray-700 mb-10">
-        <h2 className="text-2xl font-semibold">User Info</h2>
-        <p className="text-gray-300 mt-2">Email: {user.email}</p>
-        <p className="text-gray-300 mt-1">
-          Wallet: {user.wallet_address || "지갑 없음"}
-        </p>
+      <div className="bg-gray-800/40 p-8 rounded-2xl border border-gray-700 mb-10 shadow-lg">
+        <h2 className="text-2xl font-semibold mb-4">User Info</h2>
+        <p className="text-gray-300 mt-1">Email: {user.email}</p>
+        <p className="text-gray-300 mt-1">Wallet: {user.wallet_address || "지갑 없음"}</p>
 
-        <button
-          onClick={downloadPrivateKey}
-          disabled={downloading}
-          className="mt-5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-semibold"
-        >
-          {downloading ? "다운로드 중..." : "개인키 TXT 다운로드"}
-        </button>
-        <button
-          onClick={() => navigate("/mypage/edit")}
-          className="ml-3 px-5 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-semibold"
-        >
-          회원 정보 수정
-        </button>
-
-        {/* 환전 섹션 */}
-        <div className="mt-5">
-          <input
-            type="number"
-            value={exchangeAmount}
-            onChange={(e) => setExchangeAmount(e.target.value)}
-            placeholder="교환할 Token 개수"
-            className="px-3 py-2 rounded-lg text-black w-48 mr-3"
-          />
+        {/* 버튼 박스 */}
+        <div className="mt-6 flex flex-wrap gap-3">
           <button
-            onClick={handleExchange}
-            className="px-5 py-2 bg-yellow-500 hover:bg-yellow-600 rounded-lg font-semibold"
+            onClick={downloadPrivateKey}
+            disabled={downloading}
+            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-semibold shadow"
           >
-            환전하기
+            {downloading ? "다운로드 중..." : "개인키 TXT 다운로드"}
           </button>
+
+          <button
+            onClick={() => navigate("/mypage/edit")}
+            className="px-5 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-semibold shadow"
+          >
+            회원 정보 수정
+          </button>
+        </div>
+
+        {/* 환전 */}
+        <div className="mt-8 p-4 bg-gray-900/40 border border-gray-700 rounded-xl">
+          <h3 className="font-semibold mb-3 text-lg">Token → ETH 환전</h3>
+
+          <div className="flex items-center flex-wrap gap-3">
+            <input
+              type="number"
+              value={exchangeAmount}
+              onChange={(e) => setExchangeAmount(e.target.value)}
+              placeholder="교환할 Token 개수"
+              className="px-4 py-2 rounded-lg w-52 bg-white text-black font-semibold shadow"
+            />
+            <button
+              onClick={handleExchange}
+              className="px-5 py-2 bg-yellow-500 hover:bg-yellow-600 rounded-lg font-semibold shadow"
+            >
+              환전하기
+            </button>
+          </div>
         </div>
       </div>
 
@@ -155,12 +156,12 @@ export default function MyPage({ userSub, userAddress }) {
             return (
               <div
                 key={nft.tokenID}
-                className="bg-gray-800/40 rounded-xl border border-gray-700 p-4 shadow hover:border-indigo-500 transition cursor-pointer"
+                className="bg-gray-800/40 rounded-xl border border-gray-700 p-4 shadow hover:border-indigo-500 hover:shadow-lg transition"
               >
                 <img
                   src={nft.image}
                   alt={nft.name}
-                  className="rounded-lg mb-3"
+                  className="rounded-lg mb-3 cursor-pointer"
                   onClick={() =>
                     navigate(`/nft/${nft.contractAddress}/${nft.tokenID}`)
                   }
@@ -168,25 +169,24 @@ export default function MyPage({ userSub, userAddress }) {
                 <p className="text-lg font-semibold">{nft.name}</p>
                 <p className="text-gray-300 text-sm mt-1">Token ID: {nft.tokenID}</p>
 
-                <div className="mt-2">
+                <div className="mt-3 text-sm">
                   {isOwner ? (
                     !trade ? (
-                      <p>판매 등록 가능</p>
+                      <p className="text-green-400 font-semibold mt-1">판매 등록 가능</p>
                     ) : (
-                      <>
-                        <p>현재 가격: {trade.price} ETH</p>
-                        <p>판매 상태: 판매중</p>
-                      </>
+                      <p className="text-yellow-400 font-semibold mt-1">
+                        판매중 — {trade.price} ETH
+                      </p>
                     )
                   ) : trade ? (
-                    <>
-                      <p>판매 가격: {trade.price} ETH</p>
-                      <button className="mt-2 px-3 py-1 bg-indigo-600 rounded">
+                    <div>
+                      <p className="text-yellow-400 font-semibold">판매 가격: {trade.price} ETH</p>
+                      <button className="mt-2 px-3 py-1 bg-indigo-600 rounded hover:bg-indigo-700 font-semibold transition">
                         구매하기
                       </button>
-                    </>
+                    </div>
                   ) : (
-                    <p>미판매중</p>
+                    <p className="text-gray-400">미판매중</p>
                   )}
                 </div>
               </div>

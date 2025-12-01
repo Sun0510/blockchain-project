@@ -105,7 +105,8 @@ export default function NFTDetail({ userSub, userAddress }) {
     fontWeight: "bold",
   });
 
-  if (loading) return <p style={{ color: "white" }}>Loading...</p>;
+ if (loading)
+    return <div className="text-white text-center py-40 text-2xl">Loading...</div>;
   if (error) return <p style={{ color: "red" }}>{error}</p>;
   if (!nft) return <p style={{ color: "white" }}>NFT 데이터가 없습니다.</p>;
 

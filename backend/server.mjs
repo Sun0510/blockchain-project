@@ -113,21 +113,20 @@ app.get('/api/auth/google/callback', async (req, res) => {
     const name = payload.name || "";
     const sub = payload.sub;
 
-    // 기존 사용자 확인
     const [rows] = await db.query("SELECT * FROM users WHERE sub=?", [sub]);
     let user;
 
-    if (rows.length > 0) {
+    
+    if (rows.length > 0) { // 기존 사용자
       user = rows[0];
-    } else {
-      // 새 지갑 생성
+    } else {  // 신규 사용자
       const wallet = ethers.Wallet.createRandom();
 
       // 암호화용 비밀번호 생성
       const walletPassword = crypto.randomBytes(32).toString("hex");
       const encryptedKey = await wallet.encrypt(walletPassword);
 
-      // encryptedKey 분리 (앞 512, 뒤 나머지)
+      // encryptedKey 분할
       const encryptedKeyPart1 = encryptedKey.slice(0, 512);
       const encryptedKeyPart2 = encryptedKey.slice(512);
 
@@ -141,29 +140,45 @@ app.get('/api/auth/google/callback', async (req, res) => {
         [sub, id, name, email, createdAt]
       );
 
-      // wallets1 테이블 저장 → 앞 512자리
+      // wallets1 저장
       await db.query(
         `INSERT INTO wallets1 (sub, address, encrypted_key)
          VALUES (?, ?, ?)`,
         [sub, wallet.address, encryptedKeyPart1]
       );
 
-      // wallets2 테이블 저장 → 나머지 + 비밀번호
+      // wallets2 저장
       await db.query(
         `INSERT INTO wallets2 (sub, encrypted_key, pw)
          VALUES (?, ?, ?)`,
         [sub, encryptedKeyPart2, walletPassword]
       );
 
+      // 기초 자본 0.0001 sepoliaETH
+      try {
+        const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+        const serverWallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+
+        const tx = await serverWallet.sendTransaction({
+          to: wallet.address,
+          value: ethers.parseEther("0.0001")
+        });
+
+        console.log("Initial ETH transfer:", tx.hash);
+        await tx.wait(); // 전송 완료까지 대기
+      } catch (err) {
+        console.error("🔥 Error while sending initial ETH:", err);
+      }
+
       const [created] = await db.query("SELECT * FROM users WHERE id=?", [id]);
       user = created[0];
     }
 
-    // JWT 발급 (id를 페이로드로)
+    // JWT 발급
     const token = signToken({ id: user.id });
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false, // 개발용: 배포에서는 true(HTTPS)로 설정하세요
+      secure: true,
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
@@ -174,6 +189,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
     res.status(500).json({ error: "Google OAuth failed", details: e.message });
   }
 });
+
 
 /* -------------------------
  JWT 인증 미들웨어
@@ -674,7 +690,7 @@ app.post("/api/game/submit", authMiddleware, async (req, res) => {
 });
 
 /* -------------------------
- 리워드 관련 (원래 knex 스타일이었음 → 여기서는 미구현으로 처리)
+ 리워드 관련
 ------------------------- */
 app.post("/api/reward/open", authMiddleware, async (req, res) => {
   try {
@@ -716,6 +732,9 @@ app.post("/api/reward/open", authMiddleware, async (req, res) => {
   }
 });
 
+/* -------------------------
+ 리워드를 받아간 기록
+------------------------- */
 app.get("/api/reward/history", async (req, res) => {
   try {
     const [rows] = await db.query(

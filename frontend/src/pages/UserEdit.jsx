@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 function UserEdit() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);        // 서버에서 가져온 유저 정보
-  const [loaded, setLoaded] = useState(false);   // 로딩 완료 여부
+  const [user, setUser] = useState(null);       
+  const [loaded, setLoaded] = useState(false);  
 
   const [newName, setNewName] = useState("");
   const [newId, setNewId] = useState("");
 
-  const [idAvailable, setIdAvailable] = useState(null); // null=확인전, true=사용가능, false=중복
+  const [idAvailable, setIdAvailable] = useState(null); 
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -21,7 +21,7 @@ function UserEdit() {
         setUser(res.data);
       } catch (err) {
         console.error(err);
-        setUser(undefined); // 로그인 안됐을 경우
+        setUser(undefined); 
       } finally {
         setLoaded(true);
       }
@@ -29,7 +29,6 @@ function UserEdit() {
     fetchUserInfo();
   }, []);
 
-  // 🔍 ID 중복 확인 버튼
   const checkDuplicateId = async () => {
     if (!newId.trim()) {
       alert("ID를 입력해주세요.");
@@ -52,11 +51,9 @@ function UserEdit() {
     }
   };
 
-  // 저장 버튼
   const handleSave = async () => {
     if (!user) return;
 
-    // ID 입력했다면 중복 체크했는지 반드시 확인
     if (newId.trim() && idAvailable !== true) {
       alert("ID 중복 확인을 완료해주세요.");
       return;
@@ -80,51 +77,62 @@ function UserEdit() {
     }
   };
 
-  // ❗ 무한로딩 방지
-  if (!loaded) return <div>로딩중...</div>;
-  if (user === undefined) return <div>로그인이 필요합니다.</div>;
+  if (!loaded) return <div className="text-white text-center py-40 text-2xl">로딩중...</div>;
+  if (user === undefined) return <div className="text-white text-center py-40 text-2xl">로그인이 필요합니다.</div>;
 
   return (
-    <div style={{ maxWidth: "450px", margin: "auto" }}>
-      <h2>회원 정보 수정</h2>
+    <div className="max-w-md mx-auto mt-20 p-6 bg-gray-800/80 rounded-2xl shadow-lg text-white">
+      <h2 className="text-3xl font-bold mb-6 text-center">회원 정보 수정</h2>
 
-      <label>이메일</label>
-      <input value={user.email} disabled style={{ width: "100%", marginBottom: "15px" }} />
+      <label className="block mb-2 font-semibold">이메일</label>
+      <input 
+        value={user.email} 
+        disabled 
+        className="w-full mb-4 p-3 rounded-lg bg-gray-700 text-gray-300 border border-gray-600 cursor-not-allowed"
+      />
 
-      <label>이름</label>
+      <label className="block mb-2 font-semibold">이름</label>
       <input
         placeholder={user.name}
         value={newName}
         onChange={(e) => setNewName(e.target.value)}
-        style={{ width: "100%", marginBottom: "20px" }}
+        className="w-full mb-4 p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
 
-      <label>ID</label>
-      <div style={{ display: "flex", gap: "10px" }}>
+      <label className="block mb-2 font-semibold">ID</label>
+      <div className="flex gap-3 mb-2">
         <input
           placeholder={user.id}
           value={newId}
           onChange={(e) => {
             setNewId(e.target.value);
-            setIdAvailable(null); // ID 입력이 바뀌면 체크상태 초기화
+            setIdAvailable(null); 
           }}
-          style={{ flex: 1 }}
+          className="flex-1 p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
-        <button onClick={checkDuplicateId}>중복 확인</button>
+        <button
+          onClick={checkDuplicateId}
+          className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 rounded-lg font-semibold shadow transition"
+        >
+          중복 확인
+        </button>
       </div>
 
-      {idAvailable === true && <p style={{ color: "lightgreen" }}>사용 가능한 ID ✔</p>}
-      {idAvailable === false && <p style={{ color: "red" }}>이미 사용 중인 ID ✖</p>}
+      {idAvailable === true && <p className="text-green-400 mb-2">사용 가능한 ID ✔</p>}
+      {idAvailable === false && <p className="text-red-400 mb-2">이미 사용 중인 ID ✖</p>}
 
-      <button onClick={handleSave} style={{ width: "100%", padding: "10px", marginTop: "35px" }}>
+      <button
+        onClick={handleSave}
+        className="w-full py-3 mt-4 bg-yellow-500 hover:bg-yellow-600 rounded-lg font-bold text-black shadow transition"
+      >
         저장
       </button>
       <button
-            onClick={() => navigate("/mypage")}
-            className="px-5 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg font-semibold"
-          >
-            취소
-          </button>
+        onClick={() => navigate("/mypage")}
+        className="w-full py-3 mt-3 bg-gray-600 hover:bg-gray-700 rounded-lg font-semibold text-white shadow transition"
+      >
+        취소
+      </button>
     </div>
   );
 }
