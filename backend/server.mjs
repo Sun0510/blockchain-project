@@ -28,6 +28,11 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URL = process.env.GOOGLE_REDIRECT_URL;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const DATABASE_HOST= process.env.DATABASE_HOST;
+const DATABASE_USER= process.env.DATABASE_USER;
+const DATABASE_PASSWORD= process.env.DATABASE_PASSWORD;
+const DATABASE_NAME=process.env.DATABASE_NAME;
+const DATABASE_PORT= process.env.DATABASE_PORT;
 
 /* -------------------------
  랜덤 범위 (버그 수정)
@@ -56,13 +61,13 @@ const googleClient = new OAuth2Client({
  MySQL 연결 (mysql2 pool)
 ------------------------- */
 const db = await mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: 'root',
-  database: 'blockchain_service',
+  host: DATABASE_HOST,
+  user: DATABASE_USER,
+  password: DATABASE_PASSWORD,
+  database: DATABASE_NAME,
   waitForConnections: true,
   connectionLimit: 10,
-  port: 3306
+  port: DATABASE_PORT
 });
 
 /* -------------------------
