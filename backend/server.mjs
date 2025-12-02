@@ -360,7 +360,7 @@ app.put("/users/update", authMiddleware, async (req, res) => {
     const newToken = signToken({ id: newId });
     res.cookie("token", newToken, {
       httpOnly: true,
-      secure: false, // 배포 시 true
+      secure: true, // 배포 시 true
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
