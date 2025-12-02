@@ -6,12 +6,12 @@ export default function NFTList() {
   const [nfts, setNfts] = useState([]);
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
-
+  const BACKEND_URL = import.meta.env.VITE_API_URL;
   useEffect(() => {
     async function fetchData() {
       try {
         try {
-          const resUser = await axios.get("http://localhost:4000/api/me", {
+          const resUser = await axios.get(BACKEND_URL+"/api/me", {
             withCredentials: true,
           });
           setUser(resUser.data);
@@ -20,11 +20,11 @@ export default function NFTList() {
         }
 
         // NFT 및 판매 정보 가져오기
-        const resNFTs = await axios.get("http://localhost:4000/api/nfts", {
+        const resNFTs = await axios.get(BACKEND_URL+"/api/nfts", {
           withCredentials: true,
         });
 
-        const resTrades = await axios.get("http://localhost:4000/api/trades", {
+        const resTrades = await axios.get(BACKEND_URL+"/api/trades", {
           withCredentials: true,
         });
 

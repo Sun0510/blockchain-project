@@ -11,11 +11,13 @@ function UserEdit() {
   const [newId, setNewId] = useState("");
 
   const [idAvailable, setIdAvailable] = useState(null); 
+  
+  const BACKEND_URL = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const res = await axios.get("http://localhost:4000/api/me", {
+        const res = await axios.get(BACKEND_URL+"/api/me", {
           withCredentials: true,
         });
         setUser(res.data);
@@ -37,7 +39,7 @@ function UserEdit() {
 
     try {
       const res = await axios.post(
-        "http://localhost:4000/users/check-id",
+        BACKEND_URL+"/users/check-id",
         { id: newId.trim() },
         { withCredentials: true }
       );
@@ -64,7 +66,7 @@ function UserEdit() {
 
     try {
       await axios.put(
-        "http://localhost:4000/users/update",
+        BACKEND_URL+"/users/update",
         { name: updatedName, id: updatedId },
         { withCredentials: true }
       );

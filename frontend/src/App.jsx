@@ -24,12 +24,13 @@ export default function App() {
   const [ethBalance, setEthBalance] = useState("-");
   const [tokenBalance, setTokenBalance] = useState("-");
   const navigate = useNavigate();
+  const BACKEND_URL = import.meta.env.VITE_API_URL;
 
   // 로그인 상태 확인
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await API.get("/api/me");
+        const res = await API.get(BACKEND_URL+"/api/me");
         setUser(res.data);
       } catch {
         setUser(null);
@@ -43,7 +44,7 @@ export default function App() {
     const fetchBalances = async () => {
       if (!user) return;
       try {
-        const res = await API.get("/api/balances");
+        const res = await API.get(BACKEND_URL+"/api/balances");
         setEthBalance(res.data.ethBalance);
         setTokenBalance(res.data.tokenBalance);
       } catch {
@@ -56,7 +57,7 @@ export default function App() {
 
   // 로그아웃
   const handleLogout = () => {
-    API.post("/api/logout").finally(() => {
+    API.post(BACKEND_URL+"/api/logout").finally(() => {
       setUser(null);
       navigate("/");
     });

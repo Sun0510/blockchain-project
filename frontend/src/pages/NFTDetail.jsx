@@ -9,12 +9,12 @@ export default function NFTDetail({ userSub, userAddress }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [inputPrice, setInputPrice] = useState("");
-
+  const BACKEND_URL = import.meta.env.VITE_API_URL;
   // NFT 데이터 가져오기
   useEffect(() => {
     async function fetchNFT() {
       try {
-        const res = await axios.get(`http://localhost:4000/api/nfts`, { withCredentials: true });
+        const res = await axios.get(`${BACKEND_URL}/api/nfts`, { withCredentials: true });
         const nftList = res.data.result;
         const nftData = nftList.find(
           (item) =>
@@ -39,7 +39,7 @@ export default function NFTDetail({ userSub, userAddress }) {
       if (!nft) return;
       try {
         const res = await axios.get(
-          `http://localhost:4000/api/trades/${nft.contractAddress}/${nft.tokenID}`,
+          `${BACKEND_URL}/api/trades/${nft.contractAddress}/${nft.tokenID}`,
           { withCredentials: true }
         );
         if (res.data.success) setTrades(res.data.trades);
@@ -66,14 +66,14 @@ export default function NFTDetail({ userSub, userAddress }) {
         seq: currentTrade?.seq
       };
       const res = await axios.post(
-        `http://localhost:4000/api/trades/${action}`,
+        `${BACKEND_URL}/api/trades/${action}`,
         payload,
         { withCredentials: true }
       );
       alert(res.data.message);
 
       const tradeRes = await axios.get(
-        `http://localhost:4000/api/trades/${nft.contractAddress}/${nft.tokenID}`,
+        `${BACKEND_URL}/api/trades/${nft.contractAddress}/${nft.tokenID}`,
         { withCredentials: true }
       );
       if (tradeRes.data.success) setTrades(tradeRes.data.trades);

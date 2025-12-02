@@ -5,6 +5,8 @@ import API from "../api";
 import closedBox from "../assets/closed_box.png";
 import openBox from "../assets/opened_box.png";
 
+const BACKEND_URL = import.meta.env.VITE_API_URL;
+
 export default function Reward() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -14,7 +16,7 @@ export default function Reward() {
 
   // 로그인 체크
   useEffect(() => {
-    API.get("/api/me")
+    API.get(BACKEND_URL+"/api/me")
       .then(res => setUser(res.data))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
@@ -46,7 +48,7 @@ export default function Reward() {
     setOpening(true);
 
     try {
-      const res = await API.post("/api/reward/open", { sub: user.id });
+      const res = await API.post(BACKEND_URL+"/api/reward/open", { sub: user.id });
       setRewardResult(res.data);
     } catch (e) {
       console.error(e);

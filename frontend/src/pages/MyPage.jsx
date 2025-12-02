@@ -11,16 +11,17 @@ export default function MyPage({ userSub, userAddress }) {
   const [exchangeAmount, setExchangeAmount] = useState("");
 
   const navigate = useNavigate();
+  const BACKEND_URL = import.meta.env.VITE_API_URL;
 
   // 사용자 데이터 조회
   useEffect(() => {
     async function fetchData() {
       try {
-        const resUser = await API.get("/api/me");
+        const resUser = await API.get(BACKEND_URL+"/api/me");
         setUser(resUser.data);
 
-        const resNFTs = await API.get("/api/nfts");
-        const resTrades = await API.get("/api/trades");
+        const resNFTs = await API.get(BACKEND_URL+"/api/nfts");
+        const resTrades = await API.get(BACKEND_URL+"/api/trades");
         setTrades(resTrades.data.result);
 
         const myNFTs = resNFTs.data.result.filter(
@@ -53,7 +54,7 @@ export default function MyPage({ userSub, userAddress }) {
   const downloadPrivateKey = async () => {
     try {
       setDownloading(true);
-      const res = await API.get("/api/download-private-key", {
+      const res = await API.get(BACKEND_URL+"/api/download-private-key", {
         responseType: "blob",
       });
 
@@ -76,11 +77,11 @@ export default function MyPage({ userSub, userAddress }) {
       return;
     }
     try {
-      const res = await API.post("/api/exchange", {
+      const res = await API.post(BACKEND_URL+"/api/exchange", {
         amount: parseFloat(exchangeAmount),
       });
       alert(`환전 완료! ${res.data.ethReceived} ETH를 받았습니다.`);
-      const updatedUser = await API.get("/api/me");
+      const updatedUser = await API.get(BACKEND_URL+"/api/me");
       setUser(updatedUser.data);
     } catch (err) {
       alert("환전 실패: " + (err.response?.data?.error || err.message));

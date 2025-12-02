@@ -12,8 +12,9 @@ export default function GamePage() {
   const [rewardHistory, setRewardHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
+  const BACKEND_URL = import.meta.env.VITE_API_URL;
   useEffect(() => {
-    API.get("/api/me")
+    API.get(BACKEND_URL+"/api/me")
       .then(res => setUser(res.data))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
@@ -21,7 +22,7 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!user) return;
-    API.get("/api/reward/history")
+    API.get(BACKEND_URL+"/api/reward/history")
       .then(res => setRewardHistory(res.data))
       .catch(() => setRewardHistory([]))
       .finally(() => setHistoryLoading(false));
@@ -39,7 +40,7 @@ export default function GamePage() {
         return;
       }
 
-      const res = await API.post("/api/game/submit", { input, sub: user.sub });
+      const res = await API.post(BACKEND_URL+"/api/game/submit", { input, sub: user.sub });
       setResult(res.data);
 
       if (res.data.success && !res.data.duplicate) {

@@ -2,9 +2,10 @@ import React from 'react';
 import API from '../api';
 
 export default function Login() {
+  const BACKEND_URL = import.meta.env.VITE_API_URL;
   const handleGoogleLogin = () => {
     // 백엔드 OAuth 로그인 URL로 이동
-    window.location.href = `http://localhost:4000/api/auth/google/login`;
+    window.location.href = `${BACKEND_URL}/api/auth/google/login`;
   };
 
   return (
