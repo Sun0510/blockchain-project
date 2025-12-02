@@ -5,6 +5,5 @@
   ],
   "framework": "vite",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "rootDirectory": "frontend"
+  "outputDirectory": "dist"
 }
