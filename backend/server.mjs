@@ -184,7 +184,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
     res.cookie("token", token, {
       httpOnly: true,
       secure: true,
-      sameSite: "lax",
+      sameSite: "none",
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
@@ -361,7 +361,7 @@ app.put("/users/update", authMiddleware, async (req, res) => {
     res.cookie("token", newToken, {
       httpOnly: true,
       secure: true, // 배포 시 true
-      sameSite: "lax",
+      sameSite: "none",
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
