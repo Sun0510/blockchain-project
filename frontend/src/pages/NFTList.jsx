@@ -6,7 +6,7 @@ export default function NFTList() {
   const [nfts, setNfts] = useState([]);
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
-  const BACKEND_URL = import.meta.env.VITE_API_URL;
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
   useEffect(() => {
     async function fetchData() {
       try {

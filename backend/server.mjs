@@ -10,24 +10,43 @@ import mysql from "mysql2/promise";
 import cookieParser from 'cookie-parser';
 import { OAuth2Client } from "google-auth-library";
 import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import axios from "axios";
+import {
+  cookieOptions,
+  createRateLimiter,
+  decryptSecret,
+  encryptSecret,
+  parseAllowedOrigins,
+  parsePositiveInteger,
+  requireTrustedOrigin,
+  safeEqual,
+  securityHeaders,
+  validateMetadataUrl,
+  validateProfile,
+} from "./security.mjs";
 
 
 
 /* -------------------------
  환경 변수 / 기본값 체크
 ------------------------- */
-let JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.warn("⚠️ JWT_SECRET is not set. Using a development default. Do NOT use this in production.");
-  JWT_SECRET = 'dev_jwt_secret';
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const JWT_SECRET = process.env.JWT_SECRET || (IS_PRODUCTION ? "" : "dev-only-change-me-32-characters-min");
+if (JWT_SECRET.length < 32) {
+  throw new Error("JWT_SECRET must contain at least 32 characters");
 }
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URL = process.env.GOOGLE_REDIRECT_URL;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const ALLOWED_ORIGINS = parseAllowedOrigins(process.env.FRONTEND_URL);
+const FRONTEND_URL = ALLOWED_ORIGINS[0];
+const AUTH_COOKIE_OPTIONS = cookieOptions(IS_PRODUCTION);
+const WALLET_MASTER_KEY = process.env.WALLET_MASTER_KEY;
+if (IS_PRODUCTION && !WALLET_MASTER_KEY) {
+  throw new Error("WALLET_MASTER_KEY is required in production");
+}
+const METADATA_HOSTS = String(process.env.NFT_METADATA_HOSTS || "")
+  .split(",").map((host) => host.trim().toLowerCase()).filter(Boolean);
 const DATABASE_HOST= process.env.DATABASE_HOST;
 const DATABASE_USER= process.env.DATABASE_USER;
 const DATABASE_PASSWORD= process.env.DATABASE_PASSWORD;
@@ -74,27 +93,45 @@ const db = await mysql.createPool({
  JWT Helper
 ------------------------- */
 function signToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, JWT_SECRET, {
+    algorithm: "HS256",
+    audience: "blockchain-project-frontend",
+    issuer: "blockchain-project-backend",
+    expiresIn: '7d'
+  });
 }
 
 /* -------------------------
  Express 앱 설정
 ------------------------- */
 const app = express();
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+app.use(securityHeaders);
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ limit: "32kb", strict: true }));
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin(origin, callback) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin.replace(/\/$/, ""))) return callback(null, true);
+    return callback(new Error("Origin is not allowed"));
+  },
   credentials: true
 }));
+app.use(requireTrustedOrigin(ALLOWED_ORIGINS));
+
+const authRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 });
+const sensitiveRateLimit = createRateLimiter({ windowMs: 60 * 1000, max: 10 });
 
 /* -------------------------
  Google OAuth Login URL
 ------------------------- */
-app.get('/api/auth/google/login', (req, res) => {
+app.get('/api/auth/google/login', authRateLimit, (req, res) => {
+  const state = crypto.randomBytes(32).toString("hex");
+  res.cookie("oauth_state", state, { ...AUTH_COOKIE_OPTIONS, maxAge: 10 * 60 * 1000 });
   const url = googleClient.generateAuthUrl({
     access_type: "offline",
     scope: ["openid", "email", "profile"],
+    state,
   });
   res.redirect(url);
 });
@@ -102,10 +139,14 @@ app.get('/api/auth/google/login', (req, res) => {
 /* -------------------------
  Google OAuth Callback
 ------------------------- */
-app.get('/api/auth/google/callback', async (req, res) => {
+app.get('/api/auth/google/callback', authRateLimit, async (req, res) => {
   try {
     const code = req.query.code;
-    if (!code) return res.status(400).json({ error: "No code" });
+    const state = req.query.state;
+    if (!code || !state || !safeEqual(state, req.cookies.oauth_state)) {
+      return res.status(400).json({ error: "Invalid OAuth callback" });
+    }
+    res.clearCookie("oauth_state", AUTH_COOKIE_OPTIONS);
 
     const { tokens } = await googleClient.getToken(code);
     const ticket = await googleClient.verifyIdToken({
@@ -114,6 +155,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
     });
 
     const payload = ticket.getPayload();
+    if (!payload?.email_verified) return res.status(403).json({ error: "Google email is not verified" });
     const email = payload.email;
     const name = payload.name || "";
     const sub = payload.sub;
@@ -156,7 +198,7 @@ app.get('/api/auth/google/callback', async (req, res) => {
       await db.query(
         `INSERT INTO wallets2 (sub, encrypted_key, pw)
          VALUES (?, ?, ?)`,
-        [sub, encryptedKeyPart2, walletPassword]
+        [sub, encryptedKeyPart2, encryptSecret(walletPassword, WALLET_MASTER_KEY)]
       );
 
       // 기초 자본 0.0001 sepoliaETH
@@ -181,17 +223,12 @@ app.get('/api/auth/google/callback', async (req, res) => {
 
     // JWT 발급
     const token = signToken({ id: user.id });
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    res.cookie("token", token, { ...AUTH_COOKIE_OPTIONS, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
     res.redirect(`${FRONTEND_URL}/mypage`);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Google OAuth failed", details: e.message });
+    res.status(500).json({ error: "Google OAuth failed" });
   }
 });
 
@@ -204,7 +241,11 @@ function authMiddleware(req, res, next) {
   if (!token) return res.status(401).json({ error: "Not logged in" });
 
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    req.user = jwt.verify(token, JWT_SECRET, {
+      algorithms: ["HS256"],
+      audience: "blockchain-project-frontend",
+      issuer: "blockchain-project-backend",
+    });
     next();
   } catch {
     return res.status(401).json({ error: "Invalid token" });
@@ -217,7 +258,7 @@ function authMiddleware(req, res, next) {
 app.get('/api/me', authMiddleware, async (req, res) => {
   try {
     const [[user]] = await db.query(
-      `SELECT u.sub, u.id, u.email, u.name, w.address AS wallet_address
+      `SELECT u.id, u.email, u.name, w.address AS wallet_address
        FROM users u
        LEFT JOIN wallets1 w ON u.sub = w.sub
        WHERE u.id = ?`,
@@ -228,7 +269,7 @@ app.get('/api/me', authMiddleware, async (req, res) => {
     res.json(user);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Failed to fetch user", details: e.message });
+    res.status(500).json({ error: "Failed to fetch user" });
   }
 });
 
@@ -270,7 +311,7 @@ app.get("/api/balances", authMiddleware, async (req, res) => {
     res.json({ ethBalance, tokenBalance });
   } catch (err) {
     console.error("잔액 조회 실패:", err);
-    res.status(500).json({ ethBalance: "N/A", tokenBalance: "N/A", error: err.message });
+    res.status(500).json({ ethBalance: "N/A", tokenBalance: "N/A", error: "Balance lookup failed" });
   }
 });
 
@@ -278,8 +319,11 @@ app.get("/api/balances", authMiddleware, async (req, res) => {
 /* -------------------------
  사용자 개인키 다운로드
 ------------------------- */
-app.get("/api/download-private-key", authMiddleware, async (req, res) => {
+app.get("/api/download-private-key", authMiddleware, sensitiveRateLimit, async (req, res) => {
   try {
+    if (process.env.ALLOW_PRIVATE_KEY_EXPORT !== "true") {
+      return res.status(403).json({ message: "Private key export is disabled" });
+    }
     // 1) 사용자 id -> sub 조회
     const [[userRow]] = await db.query("SELECT sub FROM users WHERE id=?", [req.user.id]);
     if (!userRow) return res.status(404).json({ message: "User not found" });
@@ -298,7 +342,7 @@ app.get("/api/download-private-key", authMiddleware, async (req, res) => {
 
     // 3) encryptedKey 재조합
     const fullEncryptedKey = String(w1.encrypted_key) + String(w2.encrypted_key);
-    const walletPassword = w2.pw;
+    const walletPassword = decryptSecret(w2.pw, WALLET_MASTER_KEY);
 
     // 4) 복호화 (ethers)
     // fromEncryptedJson expects the JSON string (the keystore)
@@ -306,26 +350,14 @@ app.get("/api/download-private-key", authMiddleware, async (req, res) => {
     const privateKey = wallet.privateKey; // 0x....
 
     // 5) 임시 파일 생성 후 전송
-    const tmpDir = os.tmpdir();
-    const filename = `private_key_${req.user.id}.txt`;
-    const filePath = path.join(tmpDir, filename);
-
-    await fs.promises.writeFile(filePath, privateKey, { encoding: 'utf8', mode: 0o600 });
-
-    res.download(filePath, "my_private_key.txt", async (err) => {
-      try {
-        await fs.promises.unlink(filePath);
-      } catch (unlinkErr) {
-        console.error("Failed to delete temp private key file:", unlinkErr);
-      }
-      if (err) {
-        console.error("Res.download error:", err);
-      }
-    });
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="my_private_key.txt"');
+    res.send(privateKey);
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Failed to decrypt or download private key", details: err.message });
+    res.status(500).json({ message: "Failed to decrypt or download private key" });
   }
 });
 
@@ -336,16 +368,16 @@ app.get("/api/download-private-key", authMiddleware, async (req, res) => {
 app.put("/users/update", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { name, id } = req.body;
+    const { name, id } = validateProfile(req.body || {});
 
     const [rows] = await db.query("SELECT name, id FROM users WHERE id = ?", [userId]);
     if (rows.length === 0) return res.status(404).json({ error: "User not found" });
     const current = rows[0];
 
-    const newName = name?.trim() === "" ? current.name : name.trim();
-    const newId = id?.trim() === "" ? current.id : id.trim();
+    const newName = name === "" ? current.name : name;
+    const newId = id === "" ? current.id : id;
 
-    if (id?.trim() !== "" && newId !== current.id) {
+    if (id !== "" && newId !== current.id) {
       const [dupCheck] = await db.query(
         "SELECT id FROM users WHERE id = ? AND id != ?",
         [newId, current.id]
@@ -362,13 +394,15 @@ app.put("/users/update", authMiddleware, async (req, res) => {
       httpOnly: true,
       secure: true, // 배포 시 true
       sameSite: "none",
+      ...AUTH_COOKIE_OPTIONS,
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
     return res.json({ success: true, name: newName, id: newId });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Server error", details: err.message });
+    const badInput = err.message?.startsWith("Invalid") || err.message?.startsWith("ID must");
+    res.status(badInput ? 400 : 500).json({ error: badInput ? err.message : "Server error" });
   }
 });
 
@@ -378,10 +412,10 @@ app.put("/users/update", authMiddleware, async (req, res) => {
 
 app.post("/users/check-id", authMiddleware, async (req, res) => {
   try {
-    const { id } = req.body;
+    const { id } = validateProfile({ id: req.body?.id });
     if (!id || id.trim() === "") return res.status(400).json({ error: "ID를 입력해주세요." });
 
-    const [rows] = await db.query("SELECT id FROM users WHERE id = ?", [id.trim()]);
+    const [rows] = await db.query("SELECT id FROM users WHERE id = ?", [id]);
     res.json({ available: rows.length === 0 });
   } catch (err) {
     console.error(err);
@@ -394,7 +428,7 @@ app.post("/users/check-id", authMiddleware, async (req, res) => {
  로그아웃
 ------------------------- */
 app.post('/api/logout', (req, res) => {
-  res.clearCookie("token");
+  res.clearCookie("token", AUTH_COOKIE_OPTIONS);
   res.json({ ok: true });
 });
 
@@ -417,8 +451,12 @@ app.get("/api/nfts", async (req, res) => {
       
       // tokenURI 가져오기
       const tokenURI = await contract.tokenURI(row.tokenID);
-      const metadata = (await axios.get(tokenURI, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NFTFetcher/1.0)' }
+      const metadataUrl = validateMetadataUrl(tokenURI, METADATA_HOSTS);
+      const metadata = (await axios.get(metadataUrl, {
+        headers: { 'User-Agent': 'NFTFetcher/1.0' },
+        timeout: 5000,
+        maxContentLength: 1024 * 1024,
+        maxRedirects: 0,
       })).data;
 
       // 스마트 컨트랙트에서 실제 소유자 지갑 조회
@@ -470,12 +508,9 @@ app.get("/api/nfts", async (req, res) => {
 /* -------------------------
  환전하기
 ------------------------- */
-app.post("/api/exchange", authMiddleware, async (req, res) => {
+app.post("/api/exchange", authMiddleware, sensitiveRateLimit, async (req, res) => {
   try {
-    const { amount } = req.body;
-    if (!amount || isNaN(amount) || amount <= 0) {
-      return res.status(400).json({ error: "Invalid amount" });
-    }
+    const amount = parsePositiveInteger(req.body?.amount);
 
     // 1) 사용자 id -> sub 조회
     const [[userRow]] = await db.query("SELECT sub FROM users WHERE id=?", [req.user.id]);
@@ -497,7 +532,7 @@ app.post("/api/exchange", authMiddleware, async (req, res) => {
 
     // 3) encryptedKey 재조합
     const fullEncryptedKey = String(w1.encrypted_key) + String(w2.encrypted_key);
-    const walletPassword = w2.pw;
+    const walletPassword = decryptSecret(w2.pw, WALLET_MASTER_KEY);
 
     // 4) 복호화 (ethers)
     // 사용자 지갑 객체 생성
@@ -520,14 +555,14 @@ app.post("/api/exchange", authMiddleware, async (req, res) => {
     const tokenContractUser = new ethers.Contract(tokenAddress, ERC20_ABI, userWallet);
 
     // 소수점 조회
-    const rawAmount = ethers.parseUnits(amount.toString(), 0);
+    const rawAmount = amount;
 
     //  사용자 → 서버  토큰 전송
     const txToken = await tokenContractUser.transfer(serverAddress, rawAmount);
     await txToken.wait();
 
     // 비율 계산 1 token = 0.0001 ETH
-    const ethAmount = ethers.parseEther((amount * 0.0001).toString());
+    const ethAmount = amount * 100000000000000n;
 
     // 서버 → 사용자 ETH 송금
     const txETH = await serverWallet.sendTransaction({
@@ -544,7 +579,7 @@ app.post("/api/exchange", authMiddleware, async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "환전 실패", details: err.message });
+    return res.status(500).json({ error: "Exchange failed" });
   }
 });
 
@@ -557,7 +592,7 @@ app.get("/api/trades/:contractAddress/:tokenID", async (req, res) => {
   const { contractAddress, tokenID } = req.params;
   try {
     const [rows] = await db.query(
-      "SELECT * FROM trades WHERE tokenID=? AND address=? AND receiver IS NULL",
+      "SELECT seq, tokenID, address, price, completed_at FROM trades WHERE tokenID=? AND address=? AND receiver IS NULL",
       [tokenID, contractAddress]
     );
     return res.json({ success: true, trades: rows });
@@ -570,7 +605,9 @@ app.get("/api/trades/:contractAddress/:tokenID", async (req, res) => {
 // trades 전체 조회
 app.get("/api/trades", async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM trades");
+    const [rows] = await db.query(
+      "SELECT seq, tokenID, address, price, IF(receiver IS NULL, NULL, 'reserved') AS receiver, completed_at FROM trades"
+    );
     res.json({ success: true, result: rows });
   } catch (err) {
     console.error(err);
@@ -581,40 +618,73 @@ app.get("/api/trades", async (req, res) => {
 // NFT 판매/구매 관련 API
 app.post("/api/trades/:action", authMiddleware, async (req, res) => {
   const { action } = req.params; // sell, updatePrice, cancel, buy
-  const { tokenID, contractAddress, price, userSub, seq } = req.body;
+  const { tokenID, contractAddress, price, seq } = req.body;
 
   try {
+    if (!["sell", "updatePrice", "cancel", "buy"].includes(action)) {
+      return res.status(400).json({ success: false, message: "Unknown action" });
+    }
+    const [[currentUser]] = await db.query(
+      `SELECT u.sub, w.address FROM users u
+       JOIN wallets1 w ON u.sub = w.sub WHERE u.id = ?`,
+      [req.user.id]
+    );
+    if (!currentUser) return res.status(404).json({ message: "User wallet not found" });
     if (action === "sell") {
+      const normalizedAddress = ethers.getAddress(contractAddress);
+      const normalizedTokenId = String(tokenID ?? "").trim();
+      if (!/^\d+$/.test(normalizedTokenId) || BigInt(normalizedTokenId) > BigInt(Number.MAX_SAFE_INTEGER)) {
+        return res.status(400).json({ message: "Invalid token ID" });
+      }
+      const priceWei = ethers.parseEther(String(price));
+      if (priceWei <= 0n || priceWei > ethers.parseEther("100")) {
+        return res.status(400).json({ message: "Invalid sale price" });
+      }
+      const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+      const NFTABI = JSON.parse(fs.readFileSync("./abi/SHINUNFT.json", "utf8"));
+      const contract = new ethers.Contract(normalizedAddress, NFTABI, provider);
+      const owner = await contract.ownerOf(normalizedTokenId);
+      if (owner.toLowerCase() !== currentUser.address.toLowerCase()) {
+        return res.status(403).json({ message: "Only the on-chain owner can list this NFT" });
+      }
       // 판매 등록
       await db.query(
         "INSERT INTO trades (tokenID, address, price, nft_owner) VALUES (?, ?, ?, ?)",
-        [tokenID, contractAddress, price, userSub]
+        [normalizedTokenId, normalizedAddress, ethers.formatEther(priceWei), currentUser.sub]
       );
       return res.json({ success: true, message: "판매 등록 완료" });
     }
 
     if (action === "updatePrice") {
+      const priceWei = ethers.parseEther(String(price));
+      if (priceWei <= 0n || priceWei > ethers.parseEther("100")) {
+        return res.status(400).json({ message: "Invalid sale price" });
+      }
       // 가격 수정
-      await db.query(
-        "UPDATE trades SET price = ? WHERE tokenID = ? AND address = ?",
-        [price, tokenID, contractAddress]
+      const [result] = await db.query(
+        "UPDATE trades SET price = ? WHERE seq = ? AND nft_owner = ? AND receiver IS NULL",
+        [ethers.formatEther(priceWei), seq, currentUser.sub]
       );
+      if (result.affectedRows !== 1) return res.status(403).json({ message: "Not allowed to update this trade" });
       return res.json({ success: true, message: "가격 수정 완료" });
     }
 
     if (action === "cancel") {
       // 거래 취소
-      await db.query(
-        "DELETE FROM trades WHERE tokenID = ? AND address = ?",
-        [tokenID, contractAddress]
+      const [result] = await db.query(
+        "DELETE FROM trades WHERE seq = ? AND nft_owner = ? AND receiver IS NULL",
+        [seq, currentUser.sub]
       );
+      if (result.affectedRows !== 1) return res.status(403).json({ message: "Not allowed to cancel this trade" });
       return res.json({ success: true, message: "거래 취소 완료" });
     }
 
     if (action === "buy") {
+      let reserved = false;
+      let paymentSent = false;
       try {
         // ① 거래 조회
-        const [[trade]] = await db.query("SELECT * FROM trades WHERE seq=?", [seq]);
+        const [[trade]] = await db.query("SELECT * FROM trades WHERE seq=? AND receiver IS NULL", [seq]);
         if (!trade) return res.status(404).json({ message: "거래 없음" });
 
         const tokenID = trade.tokenID;
@@ -623,8 +693,8 @@ app.post("/api/trades/:action", authMiddleware, async (req, res) => {
         const sellerSub = trade.nft_owner;  // 판매자의 sub 저장되어 있다고 가정
 
         // ② 구매자 sub 조회
-        const [[buyerRow]] = await db.query("SELECT sub FROM users WHERE id=?", [req.user.id]);
-        const buyerSub = buyerRow.sub;
+        const buyerSub = currentUser.sub;
+        if (buyerSub === sellerSub) return res.status(400).json({ message: "You cannot buy your own NFT" });
 
         const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 
@@ -634,7 +704,7 @@ app.post("/api/trades/:action", authMiddleware, async (req, res) => {
         if (bw1.length === 0 || bw2.length === 0) return res.status(404).json({ message: "구매자 지갑 없음" });
 
         const buyerEncrypted = String(bw1[0].encrypted_key) + String(bw2[0].encrypted_key);
-        const buyerWalletPw = bw2[0].pw;
+        const buyerWalletPw = decryptSecret(bw2[0].pw, WALLET_MASTER_KEY);
         const buyerWalletDecrypted = await ethers.Wallet.fromEncryptedJson(buyerEncrypted, buyerWalletPw);
         const buyerWallet = new ethers.Wallet(buyerWalletDecrypted.privateKey, provider);
         const buyerAddress = buyerWallet.address;
@@ -645,7 +715,7 @@ app.post("/api/trades/:action", authMiddleware, async (req, res) => {
         if (sw1.length === 0 || sw2.length === 0) return res.status(404).json({ message: "판매자 지갑 없음" });
 
         const sellerEncrypted = String(sw1[0].encrypted_key) + String(sw2[0].encrypted_key);
-        const sellerWalletPw = sw2[0].pw;
+        const sellerWalletPw = decryptSecret(sw2[0].pw, WALLET_MASTER_KEY);
         const sellerWalletDecrypted = await ethers.Wallet.fromEncryptedJson(sellerEncrypted, sellerWalletPw);
         const sellerWallet = new ethers.Wallet(sellerWalletDecrypted.privateKey, provider);
         const sellerAddress = sellerWallet.address;
@@ -653,6 +723,16 @@ app.post("/api/trades/:action", authMiddleware, async (req, res) => {
         // ================ NFT ABI 로드 ================
         const NFTABI = JSON.parse(fs.readFileSync("./abi/SHINUNFT.json", "utf8"));
         const nftContract = new ethers.Contract(nftAddress, NFTABI, sellerWallet);
+        const owner = await nftContract.ownerOf(tokenID);
+        if (owner.toLowerCase() !== sellerAddress.toLowerCase()) {
+          return res.status(409).json({ message: "Seller no longer owns this NFT" });
+        }
+        const [reservation] = await db.query(
+          "UPDATE trades SET receiver=? WHERE seq=? AND receiver IS NULL",
+          [buyerSub, seq]
+        );
+        if (reservation.affectedRows !== 1) return res.status(409).json({ message: "Trade is already being processed" });
+        reserved = true;
 
         // ================ 1) 구매자가 판매자에게 ETH 전송 ================
         const txETH = await buyerWallet.sendTransaction({
@@ -660,6 +740,7 @@ app.post("/api/trades/:action", authMiddleware, async (req, res) => {
           value: ethers.parseEther(price.toString()),
         });
         await txETH.wait();
+        paymentSent = true;
 
         // ================ 2) 판매자가 구매자에게 NFT 전송 ================
         const txNFT = await nftContract.transferFrom(sellerAddress, buyerAddress, tokenID);
@@ -667,8 +748,8 @@ app.post("/api/trades/:action", authMiddleware, async (req, res) => {
 
         // ================ DB 업데이트 ================
         await db.query(
-          "UPDATE trades SET receiver=?, completed_at=NOW() WHERE seq=?", 
-          [buyerSub, seq]
+          "UPDATE trades SET completed_at=NOW() WHERE seq=? AND receiver=?",
+          [seq, buyerSub]
         );
 
         return res.json({
@@ -681,10 +762,13 @@ app.post("/api/trades/:action", authMiddleware, async (req, res) => {
 
     } catch (err) {
       console.error(err);
+      if (reserved && !paymentSent) {
+        await db.query("UPDATE trades SET receiver=NULL WHERE seq=? AND completed_at IS NULL", [seq]);
+      }
       return res.status(500).json({
           success: false,
           message: "서버 내부 오류가 발생했습니다.",
-          error: err.message
+          error: "Trade execution failed"
       });
     }
   }
@@ -699,11 +783,15 @@ app.post("/api/trades/:action", authMiddleware, async (req, res) => {
 /* -------------------------
  게임 제출 API
 ------------------------- */
-app.post("/api/game/submit", authMiddleware, async (req, res) => {
+app.post("/api/game/submit", authMiddleware, sensitiveRateLimit, async (req, res) => {
   try {
-    const { input, sub } = req.body;
-    if (!input || input.length > 20) return res.status(400).json({ error: "INVALID_INPUT" });
-    if (!sub) return res.status(401).json({ error: "UNAUTHORIZED" });
+    const input = typeof req.body?.input === "string" ? req.body.input.trim() : "";
+    if (!input || input.length > 20 || Buffer.byteLength(input, "utf8") > 80) {
+      return res.status(400).json({ error: "INVALID_INPUT" });
+    }
+    const [[authenticatedUser]] = await db.query("SELECT sub FROM users WHERE id=?", [req.user.id]);
+    if (!authenticatedUser) return res.status(401).json({ error: "UNAUTHORIZED" });
+    const sub = authenticatedUser.sub;
 
     // SHA256 해시
     const hashHex = crypto.createHash("sha256").update(input).digest("hex");
@@ -742,23 +830,38 @@ app.post("/api/game/submit", authMiddleware, async (req, res) => {
 
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ error: "SERVER_ERROR", message: e.message });
+    return res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
 
 /* -------------------------
  리워드 관련
 ------------------------- */
-app.post("/api/reward/open", authMiddleware, async (req, res) => {
+app.post("/api/reward/open", authMiddleware, sensitiveRateLimit, async (req, res) => {
+  let claimId;
   try {
     const [[user]] = await db.query(
-      "SELECT w.address FROM users u JOIN wallets1 w ON u.sub = w.sub WHERE u.id = ?",
+      "SELECT u.sub, w.address FROM users u JOIN wallets1 w ON u.sub = w.sub WHERE u.id = ?",
       [req.user.id]
     );
 
     if (!user || !user.address)
       return res.status(400).json({ error: "사용자 지갑 주소가 없습니다." });
 
+    const [[answer]] = await db.query(
+      `SELECT a.str FROM answers a
+       LEFT JOIN reward_claims r ON r.answer_str = a.str
+       WHERE a.sub = ? AND r.id IS NULL
+       ORDER BY a.answered_at ASC LIMIT 1`,
+      [user.sub]
+    );
+    if (!answer) return res.status(409).json({ error: "No unclaimed successful answer" });
+
+    const [claimResult] = await db.query(
+      "INSERT INTO reward_claims (answer_str, sub, status) VALUES (?, ?, 'pending')",
+      [answer.str, user.sub]
+    );
+    claimId = claimResult.insertId;
     const to = user.address;
     const amount = 1; // 지급 수량 1
 
@@ -775,17 +878,21 @@ app.post("/api/reward/open", authMiddleware, async (req, res) => {
 
     // 민팅
     const tx = await tokenContract.mint(to, amount);
+    await db.query("UPDATE reward_claims SET status='submitted', tx_hash=? WHERE id=?", [tx.hash, claimId]);
     await tx.wait();
+    await db.query("UPDATE reward_claims SET status='completed', completed_at=NOW() WHERE id=?", [claimId]);
 
     res.json({
       success: true,
       contractAddress: tokenAddress,
       to,
-      amount
+      amount,
+      txHash: tx.hash
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: err.message });
+    if (claimId) await db.query("DELETE FROM reward_claims WHERE id=? AND tx_hash IS NULL", [claimId]);
+    res.status(500).json({ success: false, error: "Reward transaction failed" });
   }
 });
 

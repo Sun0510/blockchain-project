@@ -11,7 +11,7 @@ export default function MyPage({ userSub, userAddress }) {
   const [exchangeAmount, setExchangeAmount] = useState("");
 
   const navigate = useNavigate();
-  const BACKEND_URL = import.meta.env.VITE_API_URL;
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
   // 사용자 데이터 조회
   useEffect(() => {

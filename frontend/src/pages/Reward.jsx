@@ -5,7 +5,7 @@ import API from "../api";
 import closedBox from "../assets/closed_box.png";
 import openBox from "../assets/opened_box.png";
 
-const BACKEND_URL = import.meta.env.VITE_API_URL;
+const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 export default function Reward() {
   const navigate = useNavigate();
@@ -40,7 +40,7 @@ export default function Reward() {
 
   const claimReward = async () => {
     if (opening || rewardResult) return;
-    if (!user?.sub) {
+    if (!user) {
       alert("사용자 정보가 없습니다. 다시 로그인해주세요.");
       return;
     }
@@ -48,7 +48,7 @@ export default function Reward() {
     setOpening(true);
 
     try {
-      const res = await API.post(BACKEND_URL+"/api/reward/open", { sub: user.id });
+      const res = await API.post(BACKEND_URL+"/api/reward/open", {});
       setRewardResult(res.data);
     } catch (e) {
       console.error(e);

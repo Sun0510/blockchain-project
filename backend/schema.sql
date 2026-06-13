@@ -1,0 +1,62 @@
+CREATE DATABASE IF NOT EXISTS blockchain_project
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE blockchain_project;
+
+CREATE TABLE IF NOT EXISTS users (
+  sub VARCHAR(255) NOT NULL PRIMARY KEY,
+  id VARCHAR(30) NOT NULL UNIQUE,
+  name VARCHAR(50) NOT NULL DEFAULT '',
+  email VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS wallets1 (
+  sub VARCHAR(255) NOT NULL PRIMARY KEY,
+  address VARCHAR(42) NOT NULL UNIQUE,
+  encrypted_key TEXT NOT NULL,
+  CONSTRAINT fk_wallets1_user FOREIGN KEY (sub) REFERENCES users(sub) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS wallets2 (
+  sub VARCHAR(255) NOT NULL PRIMARY KEY,
+  encrypted_key TEXT NOT NULL,
+  pw VARCHAR(255) NOT NULL,
+  CONSTRAINT fk_wallets2_user FOREIGN KEY (sub) REFERENCES users(sub) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS nfts (
+  tokenID VARCHAR(78) NOT NULL,
+  address VARCHAR(42) NOT NULL,
+  PRIMARY KEY (tokenID, address)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS trades (
+  seq BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tokenID VARCHAR(78) NOT NULL,
+  address VARCHAR(42) NOT NULL,
+  price DECIMAL(38,18) NOT NULL,
+  nft_owner VARCHAR(255) NOT NULL,
+  receiver VARCHAR(255) NULL,
+  completed_at DATETIME NULL,
+  INDEX idx_active_trade (tokenID, address, receiver),
+  CONSTRAINT fk_trade_owner FOREIGN KEY (nft_owner) REFERENCES users(sub)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS answers (
+  answer CHAR(16) NOT NULL,
+  sub VARCHAR(255) NOT NULL,
+  str VARCHAR(20) NOT NULL UNIQUE,
+  answered_at DATETIME NOT NULL,
+  INDEX idx_answer_user (sub, answered_at),
+  CONSTRAINT fk_answer_user FOREIGN KEY (sub) REFERENCES users(sub)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS reward_claims (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  answer_str VARCHAR(20) NOT NULL UNIQUE,
+  sub VARCHAR(255) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'pending',
+  tx_hash VARCHAR(80) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMP NULL
+) ENGINE=InnoDB;

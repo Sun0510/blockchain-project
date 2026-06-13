@@ -24,7 +24,7 @@ export default function App() {
   const [ethBalance, setEthBalance] = useState("-");
   const [tokenBalance, setTokenBalance] = useState("-");
   const navigate = useNavigate();
-  const BACKEND_URL = import.meta.env.VITE_API_URL;
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
   // 로그인 상태 확인
   useEffect(() => {
@@ -230,7 +230,7 @@ export default function App() {
           <Route path="/reward" element={<Reward />} />
           <Route
             path="/nft/:contractAddress/:tokenID"
-            element={<NFTDetail userSub={user?.sub} userAddress={user?.wallet_address} />}
+            element={<NFTDetail userSub={user?.id} userAddress={user?.wallet_address} />}
           />
         </Routes>
       </main>

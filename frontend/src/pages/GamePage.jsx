@@ -12,7 +12,7 @@ export default function GamePage() {
   const [rewardHistory, setRewardHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
-  const BACKEND_URL = import.meta.env.VITE_API_URL;
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
   useEffect(() => {
     API.get(BACKEND_URL+"/api/me")
       .then(res => setUser(res.data))
@@ -35,12 +35,12 @@ export default function GamePage() {
     }
 
     try {
-      if (!user?.sub) {
+      if (!user) {
         alert("사용자 정보(sub)가 없습니다. 다시 로그인해주세요.");
         return;
       }
 
-      const res = await API.post(BACKEND_URL+"/api/game/submit", { input, sub: user.sub });
+      const res = await API.post(BACKEND_URL+"/api/game/submit", { input });
       setResult(res.data);
 
       if (res.data.success && !res.data.duplicate) {

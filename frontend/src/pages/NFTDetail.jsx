@@ -9,7 +9,7 @@ export default function NFTDetail({ userSub, userAddress }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [inputPrice, setInputPrice] = useState("");
-  const BACKEND_URL = import.meta.env.VITE_API_URL;
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
   // NFT 데이터 가져오기
   useEffect(() => {
     async function fetchNFT() {
@@ -62,7 +62,6 @@ export default function NFTDetail({ userSub, userAddress }) {
         tokenID: nft.tokenID,
         contractAddress: nft.contractAddress,
         price: parseFloat(inputPrice),
-        userSub,
         seq: currentTrade?.seq
       };
       const res = await axios.post(

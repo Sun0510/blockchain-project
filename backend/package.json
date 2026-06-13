@@ -23,6 +23,8 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "dev": "nodemon server.mjs"
+    "dev": "nodemon server.mjs",
+    "test": "node --test security.test.mjs",
+    "check": "node --check server.mjs"
   }
 }

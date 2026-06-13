@@ -12,7 +12,7 @@ function UserEdit() {
 
   const [idAvailable, setIdAvailable] = useState(null); 
   
-  const BACKEND_URL = import.meta.env.VITE_API_URL;
+  const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
   useEffect(() => {
     const fetchUserInfo = async () => {
